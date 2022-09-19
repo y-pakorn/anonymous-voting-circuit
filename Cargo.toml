@@ -1,0 +1,30 @@
+[package]
+name = "voting-balance-circuit"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ark-ff = { version = "^0.3.0", default-features = false }
+ark-ec = { version = "^0.3.0", default-features = false }
+ark-ed-on-bls12-381 = { version = "^0.3.0", features = ["r1cs"] }
+ark-bls12-381 = { version = "^0.3.0", default-features = false, features = ["curve"] }
+ark-std = { version = "^0.3.0", default-features = false }
+ark-relations = { version = "^0.3.0", default-features = false }
+
+ark-r1cs-std = { version = "^0.3.0", default-features = false }
+ark-snark = { version = "^0.3.0", default-features = false }
+ark-groth16 = { version = "^0.3.0", default-features = false }
+
+ark-serialize = { version = "^0.3.0", default-features = false }
+
+ark-crypto-primitives = { version = "^0.3.0", default-features = true, features = ["r1cs"] }
+blake2 = "0.9"
+digest = "0.9"
+
+derivative = { version = "2.0", features = ["use_core"] }
+
+arkworks-native-gadgets = { version = "^1.0.0", default-features = false }
+arkworks-r1cs-gadgets = { version = "^1.0.0", default-features = false }
+arkworks-utils = { version = "^1.0.1", default-features = false, features = ["poseidon_bls381_x5_5"] }
