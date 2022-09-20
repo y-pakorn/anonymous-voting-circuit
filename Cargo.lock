@@ -648,6 +648,7 @@ dependencies = [
  "blake2",
  "derivative",
  "digest",
+ "thiserror",
 ]
 
 [[package]]
