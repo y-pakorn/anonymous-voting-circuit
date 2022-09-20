@@ -1,6 +1,7 @@
-pub mod circuit;
-pub mod random_oracle;
-pub mod signature;
+mod circuit;
+mod random_oracle;
+mod signature;
+mod utils;
 
 #[cfg(test)]
 mod tests {
