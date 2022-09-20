@@ -190,7 +190,7 @@ where
     }
 }
 
-pub fn bytes_to_bits(bytes: &[u8]) -> Vec<bool> {
+pub fn _bytes_to_bits(bytes: &[u8]) -> Vec<bool> {
     let mut bits = Vec::with_capacity(bytes.len() * 8);
     for byte in bytes {
         for i in 0..8 {
