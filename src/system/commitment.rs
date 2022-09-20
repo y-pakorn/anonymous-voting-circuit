@@ -143,7 +143,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
         &mut self,
         commitment: Fq,
         address: Fq,
-        proof: Proof<Bls12_381>,
+        proof: &Proof<Bls12_381>,
     ) -> Result<u32, SystemError> {
         Groth16::verify(&self.registration_key.1, &[commitment, address], &proof)?
             .then_some(())
@@ -176,7 +176,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
         &mut self,
         vote: u32,
         nullifier_hash: Fq,
-        proof: Proof<Bls12_381>,
+        proof: &Proof<Bls12_381>,
     ) -> Result<(), SystemError> {
         Groth16::verify(
             &self.vote_key.1,
@@ -199,6 +199,57 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
                 entry.insert(vote);
             }
         };
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use ark_ed_on_bls12_381::Fq;
+    use ark_ff::{PrimeField, UniformRand};
+    use ark_std::test_rng;
+    use arkworks_native_gadgets::poseidon::FieldHasher;
+
+    use crate::system::error::SystemError;
+
+    use super::VotingCommitmentSystem;
+
+    #[test]
+    #[ignore = "Long compute time ~27s"]
+    fn vote() -> Result<(), Box<dyn Error>> {
+        let mut system = VotingCommitmentSystem::<_, 10>::setup(test_rng(), 0)?;
+
+        let address = Fq::from_be_bytes_mod_order(b"someassaddr");
+        let randomness = Fq::rand(&mut system.rng);
+        let nullifier = Fq::rand(&mut system.rng);
+        let commitment = system
+            .hasher
+            .hash_two(&system.hasher.hash_two(&address, &randomness)?, &nullifier)?;
+        let nullifier_hash = system
+            .hasher
+            .hash_two(&nullifier, &Fq::from(system.vote_id))?;
+
+        let regis_proof =
+            system.generate_commitment_proof(commitment, address, randomness, nullifier)?;
+        let commitment_idx = system.insert_commitment(commitment, address, &regis_proof)?;
+        let whitelist_idx = system.insert_whitelist(address)?;
+
+        let vote_proof = system.generate_voting_proof(
+            whitelist_idx,
+            commitment_idx,
+            nullifier_hash,
+            address,
+            randomness,
+            nullifier,
+        )?;
+
+        system.vote(1, nullifier_hash, &vote_proof)?;
+
+        let err = system.vote(2, nullifier_hash, &vote_proof).unwrap_err();
+        assert_eq!(err, SystemError::UsedNullifier);
 
         Ok(())
     }
