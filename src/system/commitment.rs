@@ -1,8 +1,7 @@
 use std::collections::{hash_map::Entry, BTreeMap, HashMap};
 
-use ark_bls12_381::Bls12_381;
+use ark_bls12_381::{Bls12_381, Fr};
 use ark_crypto_primitives::{CircuitSpecificSetupSNARK, SNARK};
-use ark_ed_on_bls12_381::Fq;
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use ark_groth16::{Groth16, Proof, ProvingKey, VerifyingKey};
 use ark_std::rand::{CryptoRng, Rng};
@@ -20,22 +19,22 @@ use crate::{
 use super::error::SystemError;
 
 pub struct VotingCommitmentSystem<R: Rng + CryptoRng, const N: usize> {
-    pub votes: HashMap<Fq, u32>, // nullifier -> vote
+    pub votes: HashMap<Fr, u32>, // nullifier -> vote
     pub rng: R,
-    pub hasher: Poseidon<Fq>,
+    pub hasher: Poseidon<Fr>,
     pub vote_id: u32,
     pub next_whitelist_idx: u32,
     pub next_commitment_idx: u32,
-    pub whitelist_tree: SparseMerkleTree<Fq, Poseidon<Fq>, N>,
-    pub commitment_tree: SparseMerkleTree<Fq, Poseidon<Fq>, N>,
+    pub whitelist_tree: SparseMerkleTree<Fr, Poseidon<Fr>, N>,
+    pub commitment_tree: SparseMerkleTree<Fr, Poseidon<Fr>, N>,
     pub registration_key: (ProvingKey<Bls12_381>, VerifyingKey<Bls12_381>),
     pub vote_key: (ProvingKey<Bls12_381>, VerifyingKey<Bls12_381>),
 }
 
 impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
     pub fn setup(mut rng: R, vote_id: u32) -> Result<Self, SystemError> {
-        let poseidon = Poseidon::<Fq>::new(setup_params(Curve::Bls381, 5, 5));
-        let zero = Fq::zero();
+        let poseidon = Poseidon::<Fr>::new(setup_params(Curve::Bls381, 5, 5));
+        let zero = Fr::zero();
         let commitment_tree = SparseMerkleTree::<_, _, N>::new_sequential(
             &[],
             &poseidon,
@@ -50,13 +49,13 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
         let vote_key = Groth16::<Bls12_381>::setup(
             VotingCommitmentCircuit::<N> {
                 hasher: poseidon.clone(),
-                nullifier_hash: Fq::rand(&mut rng),
-                vote_id: Fq::rand(&mut rng),
-                commitment_root: Fq::rand(&mut rng),
-                whitelist_root: Fq::rand(&mut rng),
-                address: Fq::rand(&mut rng),
-                randomness: Fq::rand(&mut rng),
-                nullifier: Fq::rand(&mut rng),
+                nullifier_hash: Fr::rand(&mut rng),
+                vote_id: Fr::rand(&mut rng),
+                commitment_root: Fr::rand(&mut rng),
+                whitelist_root: Fr::rand(&mut rng),
+                address: Fr::rand(&mut rng),
+                randomness: Fr::rand(&mut rng),
+                nullifier: Fr::rand(&mut rng),
                 commitment_proof: commitment_tree.generate_membership_proof(0),
                 whitelist_proof: whitelist_tree.generate_membership_proof(0),
             },
@@ -66,10 +65,10 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
         let registration_key = Groth16::<Bls12_381>::setup(
             CommitmentRegistrationCircuit {
                 hasher: poseidon.clone(),
-                address: Fq::rand(&mut rng),
-                commitment: Fq::rand(&mut rng),
-                randomness: Fq::rand(&mut rng),
-                nullifier: Fq::rand(&mut rng),
+                address: Fr::rand(&mut rng),
+                commitment: Fr::rand(&mut rng),
+                randomness: Fr::rand(&mut rng),
+                nullifier: Fr::rand(&mut rng),
             },
             &mut rng,
         )?;
@@ -90,10 +89,10 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
 
     pub fn generate_commitment_proof(
         &mut self,
-        commitment: Fq,
-        address: Fq,
-        randomness: Fq,
-        nullifier: Fq,
+        commitment: Fr,
+        address: Fr,
+        randomness: Fr,
+        nullifier: Fr,
     ) -> Result<Proof<Bls12_381>, SystemError> {
         Ok(Groth16::prove(
             &self.registration_key.0,
@@ -112,10 +111,10 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
         &mut self,
         whitelist_index: u32,
         commitment_index: u32,
-        nullifier_hash: Fq,
-        address: Fq,
-        randomness: Fq,
-        nullifier: Fq,
+        nullifier_hash: Fr,
+        address: Fr,
+        randomness: Fr,
+        nullifier: Fr,
     ) -> Result<Proof<Bls12_381>, SystemError> {
         Ok(Groth16::prove(
             &self.vote_key.0,
@@ -123,7 +122,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
                 commitment_root: self.commitment_tree.root(),
                 whitelist_root: self.whitelist_tree.root(),
                 nullifier_hash,
-                vote_id: Fq::from(self.vote_id),
+                vote_id: Fr::from(self.vote_id),
                 address,
                 randomness,
                 nullifier,
@@ -141,8 +140,8 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
 
     pub fn insert_commitment(
         &mut self,
-        commitment: Fq,
-        address: Fq,
+        commitment: Fr,
+        address: Fr,
         proof: &Proof<Bls12_381>,
     ) -> Result<u32, SystemError> {
         Groth16::verify(&self.registration_key.1, &[commitment, address], &proof)?
@@ -159,7 +158,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
         Ok(index)
     }
 
-    pub fn insert_whitelist(&mut self, address: Fq) -> Result<u32, SystemError> {
+    pub fn insert_whitelist(&mut self, address: Fr) -> Result<u32, SystemError> {
         let addr_hashed = self.hasher.hash_two(&address, &address)?;
 
         let index = self.next_whitelist_idx;
@@ -175,7 +174,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
     pub fn vote(
         &mut self,
         vote: u32,
-        nullifier_hash: Fq,
+        nullifier_hash: Fr,
         proof: &Proof<Bls12_381>,
     ) -> Result<(), SystemError> {
         Groth16::verify(
@@ -184,7 +183,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
                 self.commitment_tree.root(),
                 self.whitelist_tree.root(),
                 nullifier_hash,
-                Fq::from(self.vote_id),
+                Fr::from(self.vote_id),
             ],
             &proof,
         )?
@@ -208,7 +207,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
 mod tests {
     use std::error::Error;
 
-    use ark_ed_on_bls12_381::Fq;
+    use ark_bls12_381::Fr;
     use ark_ff::{PrimeField, UniformRand};
     use ark_std::test_rng;
     use arkworks_native_gadgets::poseidon::FieldHasher;
@@ -222,15 +221,15 @@ mod tests {
     fn vote() -> Result<(), Box<dyn Error>> {
         let mut system = VotingCommitmentSystem::<_, 10>::setup(test_rng(), 0)?;
 
-        let address = Fq::from_be_bytes_mod_order(b"someassaddr");
-        let randomness = Fq::rand(&mut system.rng);
-        let nullifier = Fq::rand(&mut system.rng);
+        let address = Fr::from_be_bytes_mod_order(b"someassaddr");
+        let randomness = Fr::rand(&mut system.rng);
+        let nullifier = Fr::rand(&mut system.rng);
         let commitment = system
             .hasher
             .hash_two(&system.hasher.hash_two(&address, &randomness)?, &nullifier)?;
         let nullifier_hash = system
             .hasher
-            .hash_two(&nullifier, &Fq::from(system.vote_id))?;
+            .hash_two(&nullifier, &Fr::from(system.vote_id))?;
 
         let regis_proof =
             system.generate_commitment_proof(commitment, address, randomness, nullifier)?;

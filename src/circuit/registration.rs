@@ -1,4 +1,4 @@
-use ark_ed_on_bls12_381::Fq;
+use ark_bls12_381::Fr;
 use ark_r1cs_std::{
     fields::fp::FpVar,
     prelude::{AllocVar, EqGadget},
@@ -8,25 +8,25 @@ use arkworks_r1cs_gadgets::poseidon::{FieldHasherGadget, PoseidonGadget};
 
 pub struct CommitmentRegistrationCircuit {
     // Public
-    pub commitment: Fq,
-    pub address: Fq,
+    pub commitment: Fr,
+    pub address: Fr,
 
     // Secret
-    pub randomness: Fq,
-    pub nullifier: Fq,
+    pub randomness: Fr,
+    pub nullifier: Fr,
 
     // Utils
-    pub hasher: <PoseidonGadget<Fq> as FieldHasherGadget<Fq>>::Native,
+    pub hasher: <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native,
 }
 
-impl ConstraintSynthesizer<Fq> for CommitmentRegistrationCircuit {
+impl ConstraintSynthesizer<Fr> for CommitmentRegistrationCircuit {
     fn generate_constraints(
         self,
-        cs: ark_relations::r1cs::ConstraintSystemRef<Fq>,
+        cs: ark_relations::r1cs::ConstraintSystemRef<Fr>,
     ) -> ark_relations::r1cs::Result<()> {
         // Hasher
-        let hasher_var: PoseidonGadget<Fq> =
-            FieldHasherGadget::<Fq>::from_native(&mut cs.clone(), self.hasher)?;
+        let hasher_var: PoseidonGadget<Fr> =
+            FieldHasherGadget::<Fr>::from_native(&mut cs.clone(), self.hasher)?;
 
         // Public
         let commitment_var = FpVar::new_input(cs.clone(), || Ok(self.commitment))?;
@@ -49,9 +49,8 @@ impl ConstraintSynthesizer<Fq> for CommitmentRegistrationCircuit {
 mod tests {
     use std::error::Error;
 
-    use ark_bls12_381::Bls12_381;
+    use ark_bls12_381::{Bls12_381, Fr};
     use ark_crypto_primitives::{CircuitSpecificSetupSNARK, SNARK};
-    use ark_ed_on_bls12_381::Fq;
     use ark_ff::{PrimeField, UniformRand};
     use ark_groth16::Groth16;
     use ark_std::test_rng;
@@ -66,22 +65,22 @@ mod tests {
     #[ignore = "Long compute time ~3.14s"]
     fn registration_verify_simple() -> Result<(), Box<dyn Error>> {
         let mut rng = test_rng();
-        let poseidon = Poseidon::<Fq>::new(setup_params(Curve::Bls381, 5, 5));
+        let poseidon = Poseidon::<Fr>::new(setup_params(Curve::Bls381, 5, 5));
 
         let (pk, vk) = Groth16::<Bls12_381>::setup(
             CommitmentRegistrationCircuit {
                 hasher: poseidon.clone(),
-                address: Fq::rand(&mut rng),
-                commitment: Fq::rand(&mut rng),
-                randomness: Fq::rand(&mut rng),
-                nullifier: Fq::rand(&mut rng),
+                address: Fr::rand(&mut rng),
+                commitment: Fr::rand(&mut rng),
+                randomness: Fr::rand(&mut rng),
+                nullifier: Fr::rand(&mut rng),
             },
             &mut rng,
         )?;
 
-        let addr = Fq::from_be_bytes_mod_order(b"someassaddr");
-        let randomness = Fq::rand(&mut rng);
-        let nullifier = Fq::rand(&mut rng);
+        let addr = Fr::from_be_bytes_mod_order(b"someassaddr");
+        let randomness = Fr::rand(&mut rng);
+        let nullifier = Fr::rand(&mut rng);
 
         let commitment = poseidon.hash_two(&poseidon.hash_two(&addr, &randomness)?, &nullifier)?;
 
