@@ -20,8 +20,8 @@ ark-groth16 = { version = "^0.3.0", default-features = false }
 ark-serialize = { version = "^0.3.0", default-features = false }
 
 ark-crypto-primitives = { version = "^0.3.0", default-features = true, features = ["r1cs"] }
-blake2 = "0.9"
-digest = "0.9"
+blake2 = { version = "^0.9", default-features = false }
+digest = { version = "^0.9", default-features = false }
 
 derivative = { version = "2.0", features = ["use_core"] }
 
