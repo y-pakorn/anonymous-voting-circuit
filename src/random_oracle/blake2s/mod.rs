@@ -20,7 +20,7 @@ impl RandomOracle for RO {
         let mut h = b2s::new();
         h.update(input);
         let mut result = [0u8; 32];
-        result.copy_from_slice(&h.finalize());
+        result.copy_from_slice(h.finalize().as_slice());
         Ok(result)
     }
 }
