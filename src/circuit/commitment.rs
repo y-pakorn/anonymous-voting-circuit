@@ -1,4 +1,4 @@
-use ark_ed_on_bls12_381::Fq;
+use ark_bls12_381::Fr;
 use ark_r1cs_std::{
     fields::fp::FpVar,
     prelude::{AllocVar, Boolean, EqGadget},
@@ -12,31 +12,31 @@ use arkworks_r1cs_gadgets::{
 
 pub struct VotingCommitmentCircuit<const N: usize> {
     // Public
-    pub commitment_root: Fq,
-    pub whitelist_root: Fq,
-    pub nullifier_hash: Fq,
-    pub vote_id: Fq,
+    pub commitment_root: Fr,
+    pub whitelist_root: Fr,
+    pub nullifier_hash: Fr,
+    pub vote_id: Fr,
 
     // Secret
     // commitment = H(H(addr, r), nullifier)
-    pub address: Fq,
-    pub randomness: Fq,
-    pub nullifier: Fq,
-    pub commitment_proof: Path<Fq, <PoseidonGadget<Fq> as FieldHasherGadget<Fq>>::Native, N>,
-    pub whitelist_proof: Path<Fq, <PoseidonGadget<Fq> as FieldHasherGadget<Fq>>::Native, N>,
+    pub address: Fr,
+    pub randomness: Fr,
+    pub nullifier: Fr,
+    pub commitment_proof: Path<Fr, <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native, N>,
+    pub whitelist_proof: Path<Fr, <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native, N>,
 
     // Utils
-    pub hasher: <PoseidonGadget<Fq> as FieldHasherGadget<Fq>>::Native,
+    pub hasher: <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native,
 }
 
-impl<const N: usize> ConstraintSynthesizer<Fq> for VotingCommitmentCircuit<N> {
+impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentCircuit<N> {
     fn generate_constraints(
         self,
-        cs: ark_relations::r1cs::ConstraintSystemRef<Fq>,
+        cs: ark_relations::r1cs::ConstraintSystemRef<Fr>,
     ) -> ark_relations::r1cs::Result<()> {
         // Hasher
-        let hasher_var: PoseidonGadget<Fq> =
-            FieldHasherGadget::<Fq>::from_native(&mut cs.clone(), self.hasher)?;
+        let hasher_var: PoseidonGadget<Fr> =
+            FieldHasherGadget::<Fr>::from_native(&mut cs.clone(), self.hasher)?;
 
         // Public
         let commitment_root_var = FpVar::new_input(cs.clone(), || Ok(self.commitment_root))?;
@@ -49,11 +49,11 @@ impl<const N: usize> ConstraintSynthesizer<Fq> for VotingCommitmentCircuit<N> {
         let randomness_var = FpVar::new_witness(cs.clone(), || Ok(self.randomness))?;
         let nullifier_var = FpVar::new_witness(cs.clone(), || Ok(self.nullifier))?;
         let commitment_proof_var =
-            PathVar::<Fq, PoseidonGadget<Fq>, N>::new_witness(cs.clone(), || {
+            PathVar::<Fr, PoseidonGadget<Fr>, N>::new_witness(cs.clone(), || {
                 Ok(self.commitment_proof)
             })?;
         let whitelist_proof_var =
-            PathVar::<Fq, PoseidonGadget<Fq>, N>::new_witness(cs.clone(), || {
+            PathVar::<Fr, PoseidonGadget<Fr>, N>::new_witness(cs.clone(), || {
                 Ok(self.whitelist_proof)
             })?;
 
@@ -85,9 +85,8 @@ impl<const N: usize> ConstraintSynthesizer<Fq> for VotingCommitmentCircuit<N> {
 mod tests {
     use std::{collections::BTreeMap, error::Error, iter::FromIterator};
 
-    use ark_bls12_381::Bls12_381;
+    use ark_bls12_381::{Bls12_381, Fr};
     use ark_crypto_primitives::{CircuitSpecificSetupSNARK, SNARK};
-    use ark_ed_on_bls12_381::Fq;
     use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
     use ark_groth16::Groth16;
     use ark_std::test_rng;
@@ -105,8 +104,8 @@ mod tests {
     #[ignore = "Long compute time ~16.2s"]
     fn voting_commitment_verify_simple() -> Result<(), Box<dyn Error>> {
         let mut rng = test_rng();
-        let poseidon = Poseidon::<Fq>::new(setup_params(Curve::Bls381, 5, 5));
-        let zero = Fq::zero();
+        let poseidon = Poseidon::<Fr>::new(setup_params(Curve::Bls381, 5, 5));
+        let zero = Fr::zero();
 
         let mut commitment_tree = SparseMerkleTree::<_, _, 5>::new_sequential(
             &[],
@@ -122,23 +121,23 @@ mod tests {
         let (pk, vk) = Groth16::<Bls12_381>::setup(
             VotingCommitmentCircuit::<5> {
                 hasher: poseidon.clone(),
-                nullifier_hash: Fq::rand(&mut rng),
-                vote_id: Fq::rand(&mut rng),
-                commitment_root: Fq::rand(&mut rng),
-                whitelist_root: Fq::rand(&mut rng),
-                address: Fq::rand(&mut rng),
-                randomness: Fq::rand(&mut rng),
-                nullifier: Fq::rand(&mut rng),
+                nullifier_hash: Fr::rand(&mut rng),
+                vote_id: Fr::rand(&mut rng),
+                commitment_root: Fr::rand(&mut rng),
+                whitelist_root: Fr::rand(&mut rng),
+                address: Fr::rand(&mut rng),
+                randomness: Fr::rand(&mut rng),
+                nullifier: Fr::rand(&mut rng),
                 commitment_proof: commitment_tree.generate_membership_proof(0),
                 whitelist_proof: whitelist_tree.generate_membership_proof(0),
             },
             &mut rng,
         )?;
 
-        let addr = Fq::from_be_bytes_mod_order(b"someassaddr");
-        let randomness = Fq::rand(&mut rng);
-        let nullifier = Fq::rand(&mut rng);
-        let vote_id = Fq::from(0);
+        let addr = Fr::from_be_bytes_mod_order(b"someassaddr");
+        let randomness = Fr::rand(&mut rng);
+        let nullifier = Fr::rand(&mut rng);
+        let vote_id = Fr::from(0);
 
         let nullifier_hash = poseidon.hash_two(&nullifier, &vote_id)?;
         let commitment = poseidon.hash_two(&poseidon.hash_two(&addr, &randomness)?, &nullifier)?;
