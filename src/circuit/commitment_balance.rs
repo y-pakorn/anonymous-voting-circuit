@@ -135,13 +135,17 @@ impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentBalanceCircui
             &hasher_var,
         )?;
 
+        // Check after_result = E(balance) + before_result
         after_result
             .c1
             .enforce_equal(&(before_result.c1 + balance_encrypted.c1))?;
         after_result
             .c2
             .enforce_equal(&(before_result.c2 + balance_encrypted.c2))?;
+
+        // Check g * balance = balance_affine
         balance_affine_calculated.enforce_equal(&balance_affine_var)?;
+
         nullifier_hash_var.enforce_equal(&nullifier_hashed)?;
         is_correct_whitelist.enforce_equal(&Boolean::TRUE)?;
         is_correct_commitment.enforce_equal(&Boolean::TRUE)?;
