@@ -16,6 +16,9 @@ pub enum SystemError {
 
     #[error("Used Nullifier")]
     UsedNullifier,
+
+    #[error("Exceed Max Lookup Range")]
+    ExceedMaxLookup,
 }
 
 impl PartialEq for SystemError {

@@ -111,31 +111,34 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
         &mut self,
         whitelist_index: u32,
         commitment_index: u32,
-        nullifier_hash: Fr,
         address: Fr,
         randomness: Fr,
         nullifier: Fr,
-    ) -> Result<Proof<Bls12_381>, SystemError> {
-        Ok(Groth16::prove(
-            &self.vote_key.0,
-            VotingCommitmentCircuit::<N> {
-                commitment_root: self.commitment_tree.root(),
-                whitelist_root: self.whitelist_tree.root(),
-                nullifier_hash,
-                vote_id: Fr::from(self.vote_id),
-                address,
-                randomness,
-                nullifier,
-                commitment_proof: self
-                    .commitment_tree
-                    .generate_membership_proof(commitment_index as u64),
-                whitelist_proof: self
-                    .whitelist_tree
-                    .generate_membership_proof(whitelist_index as u64),
-                hasher: self.hasher.clone(),
-            },
-            &mut self.rng,
-        )?)
+    ) -> Result<(Proof<Bls12_381>, Fr), SystemError> {
+        let nullifier_hash = self.hasher.hash_two(&nullifier, &Fr::from(self.vote_id))?;
+        Ok((
+            Groth16::prove(
+                &self.vote_key.0,
+                VotingCommitmentCircuit::<N> {
+                    commitment_root: self.commitment_tree.root(),
+                    whitelist_root: self.whitelist_tree.root(),
+                    nullifier_hash,
+                    vote_id: Fr::from(self.vote_id),
+                    address,
+                    randomness,
+                    nullifier,
+                    commitment_proof: self
+                        .commitment_tree
+                        .generate_membership_proof(commitment_index as u64),
+                    whitelist_proof: self
+                        .whitelist_tree
+                        .generate_membership_proof(whitelist_index as u64),
+                    hasher: self.hasher.clone(),
+                },
+                &mut self.rng,
+            )?,
+            nullifier_hash,
+        ))
     }
 
     pub fn insert_commitment(
@@ -227,19 +230,15 @@ mod tests {
         let commitment = system
             .hasher
             .hash_two(&system.hasher.hash_two(&address, &randomness)?, &nullifier)?;
-        let nullifier_hash = system
-            .hasher
-            .hash_two(&nullifier, &Fr::from(system.vote_id))?;
 
         let regis_proof =
             system.generate_commitment_proof(commitment, address, randomness, nullifier)?;
         let commitment_idx = system.insert_commitment(commitment, address, &regis_proof)?;
         let whitelist_idx = system.insert_whitelist(address)?;
 
-        let vote_proof = system.generate_voting_proof(
+        let (vote_proof, nullifier_hash) = system.generate_voting_proof(
             whitelist_idx,
             commitment_idx,
-            nullifier_hash,
             address,
             randomness,
             nullifier,

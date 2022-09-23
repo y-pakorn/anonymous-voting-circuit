@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use ark_ec::{AffineCurve, ProjectiveCurve};
 
-pub struct LookupTable<A: AffineCurve>(pub HashMap<A, u64>);
+pub struct LookupTable<A: AffineCurve>(HashMap<A, u64>);
 
 impl<A: AffineCurve> LookupTable<A> {
     pub fn new(values: impl IntoIterator<Item = u64>) -> Self {
