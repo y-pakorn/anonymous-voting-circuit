@@ -21,13 +21,15 @@ use crate::{
         commitment_balance::VotingCommitmentBalanceCircuit,
         registration::CommitmentRegistrationCircuit,
     },
+    lookup_table::LookupTable,
     utils::setup_params,
 };
 
 use super::error::SystemError;
 
-pub struct VotingCommitmentBalanceSystem<R: Rng + CryptoRng, const N: usize> {
+pub struct VotingCommitmentBalanceSystem<R: Rng + CryptoRng, const N: usize, const MAX: u64> {
     pub current_result_encoded: (EdwardsAffine, EdwardsAffine),
+    pub lookup_table: LookupTable<EdwardsAffine>,
     pub votes: HashMap<Fr, ()>, // nullifier
     pub rng: R,
     pub hasher: Poseidon<Fr>,
@@ -45,7 +47,7 @@ pub struct VotingCommitmentBalanceSystem<R: Rng + CryptoRng, const N: usize> {
     ),
 }
 
-impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentBalanceSystem<R, N> {
+impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalanceSystem<R, N, MAX> {
     pub fn setup(mut rng: R, vote_id: u32) -> Result<Self, SystemError> {
         let poseidon = Poseidon::<Fr>::new(setup_params(Curve::Bls381, 5, 5));
         let zero = Fr::zero();
@@ -120,6 +122,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentBalanceSystem<R, N> {
             votes: HashMap::new(),
             current_result_encoded: zero,
             elgamal: (param, pk, sk),
+            lookup_table: LookupTable::new(0..MAX),
         })
     }
 
