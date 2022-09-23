@@ -9,7 +9,7 @@ use ark_crypto_primitives::encryption::{
     AsymmetricEncryptionGadget,
 };
 use ark_ec::AffineCurve;
-use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsAffine, EdwardsProjective, Fr as EdFr};
+use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsAffine, EdwardsProjective};
 use ark_r1cs_std::{
     fields::fp::FpVar,
     prelude::{AllocVar, Boolean, CurveVar, EqGadget},
@@ -43,7 +43,7 @@ pub struct VotingCommitmentBalanceCircuit<const N: usize> {
     pub whitelist_proof: Path<Fr, <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native, N>,
     pub balance: Fr,
     pub balance_affine: EdwardsAffine,
-    pub elg_randomness: EdFr, // Scalar field in ed
+    pub elg_randomness: ElGamalRandomness<EdwardsProjective>, // Scalar field in ed
 
     // Utils
     pub hasher: <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native,
@@ -106,14 +106,13 @@ impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentBalanceCircui
             PlaintextVar::<EdwardsProjective, EdwardsVar>::new_witness(cs.clone(), || {
                 Ok(self.balance_affine)
             })?;
-        let elg_randomness_var = RandomnessVar::<Fr>::new_witness(cs.clone(), || {
-            Ok(ElGamalRandomness::<EdwardsProjective>(self.elg_randomness))
-        })?;
+        let elg_randomness_var =
+            RandomnessVar::new_witness(cs.clone(), || Ok(self.elg_randomness))?;
 
         let secret = hasher_var.hash_two(&address_var, &randomness_var)?;
         let commitment = hasher_var.hash_two(&secret, &nullifier_var)?;
         let nullifier_hashed = hasher_var.hash_two(&nullifier_var, &vote_id_var)?;
-        let address_hashed = hasher_var.hash_two(&address_var, &address_var)?;
+        let whitelist_leaf = hasher_var.hash_two(&address_var, &balance_var)?;
 
         let balance_affine_calculated =
             generator_var.scalar_mul_le(balance_var.to_bits_le()?.iter())?;
@@ -126,7 +125,7 @@ impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentBalanceCircui
 
         let is_correct_whitelist = whitelist_proof_var.check_membership(
             &whitelist_root_var,
-            &address_hashed,
+            &whitelist_leaf,
             &hasher_var,
         )?;
         let is_correct_commitment = commitment_proof_var.check_membership(
@@ -154,100 +153,164 @@ impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentBalanceCircui
     }
 }
 
-//#[cfg(test)]
-//mod tests {
-//use std::{collections::BTreeMap, error::Error, iter::FromIterator};
+#[cfg(test)]
+mod tests {
+    use std::{collections::BTreeMap, error::Error, iter::FromIterator};
 
-//use ark_bls12_381::{Bls12_381, Fr};
-//use ark_crypto_primitives::{CircuitSpecificSetupSNARK, SNARK};
-//use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
-//use ark_groth16::Groth16;
-//use ark_std::test_rng;
-//use arkworks_native_gadgets::{
-//merkle_tree::SparseMerkleTree,
-//poseidon::{FieldHasher, Poseidon},
-//};
-//use arkworks_utils::Curve;
+    use ark_bls12_381::{Bls12_381, Fr};
+    use ark_crypto_primitives::{
+        encryption::{
+            elgamal::{ElGamal, Randomness},
+            AsymmetricEncryptionScheme,
+        },
+        CircuitSpecificSetupSNARK, SNARK,
+    };
+    use ark_ec::{AffineCurve, ProjectiveCurve};
+    use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsProjective};
+    use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
+    use ark_groth16::Groth16;
+    use ark_std::test_rng;
+    use arkworks_native_gadgets::{
+        merkle_tree::SparseMerkleTree,
+        poseidon::{FieldHasher, Poseidon},
+    };
+    use arkworks_utils::Curve;
 
-//use crate::utils::setup_params;
+    use crate::utils::setup_params;
 
-//use super::VotingCommitmentBalanceCircuit;
+    use super::VotingCommitmentBalanceCircuit;
 
-//#[test]
-//fn voting_commitment_verify_simple() -> Result<(), Box<dyn Error>> {
-//let mut rng = test_rng();
-//let poseidon = Poseidon::<Fr>::new(setup_params(Curve::Bls381, 5, 5));
-//let zero = Fr::zero();
+    #[test]
+    fn voting_commitment_balance_verify_simple() -> Result<(), Box<dyn Error>> {
+        let mut rng = test_rng();
+        let poseidon = Poseidon::<Fr>::new(setup_params(Curve::Bls381, 5, 5));
+        let zero = Fr::zero();
 
-//let mut commitment_tree = SparseMerkleTree::<_, _, 5>::new_sequential(
-//&[],
-//&poseidon,
-//&zero.into_repr().to_bytes_be(),
-//)?;
-//let mut whitelist_tree = SparseMerkleTree::<_, _, 5>::new_sequential(
-//&[],
-//&poseidon,
-//&zero.into_repr().to_bytes_be(),
-//)?;
+        let mut commitment_tree = SparseMerkleTree::<_, _, 5>::new_sequential(
+            &[],
+            &poseidon,
+            &zero.into_repr().to_bytes_be(),
+        )?;
+        let mut whitelist_tree = SparseMerkleTree::<_, _, 5>::new_sequential(
+            &[],
+            &poseidon,
+            &zero.into_repr().to_bytes_be(),
+        )?;
 
-//let (pk, vk) = Groth16::<Bls12_381>::setup(
-//VotingCommitmentBalanceCircuit::<5> {
-//hasher: poseidon.clone(),
-//nullifier_hash: Fr::rand(&mut rng),
-//vote_id: Fr::rand(&mut rng),
-//commitment_root: Fr::rand(&mut rng),
-//whitelist_root: Fr::rand(&mut rng),
-//address: Fr::rand(&mut rng),
-//randomness: Fr::rand(&mut rng),
-//nullifier: Fr::rand(&mut rng),
-//commitment_proof: commitment_tree.generate_membership_proof(0),
-//whitelist_proof: whitelist_tree.generate_membership_proof(0),
-//},
-//&mut rng,
-//)?;
+        let (pk, vk) = Groth16::<Bls12_381>::setup(
+            VotingCommitmentBalanceCircuit::<5> {
+                hasher: poseidon.clone(),
+                nullifier_hash: Fr::rand(&mut rng),
+                vote_id: Fr::rand(&mut rng),
+                commitment_root: Fr::rand(&mut rng),
+                whitelist_root: Fr::rand(&mut rng),
+                address: Fr::rand(&mut rng),
+                randomness: Fr::rand(&mut rng),
+                nullifier: Fr::rand(&mut rng),
+                commitment_proof: commitment_tree.generate_membership_proof(0),
+                whitelist_proof: whitelist_tree.generate_membership_proof(0),
+                elg_param: EdwardsAffine::rand(&mut rng),
+                elg_pk: EdwardsAffine::rand(&mut rng),
+                before_result: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
+                after_result: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
+                balance: Fr::rand(&mut rng),
+                balance_affine: EdwardsAffine::rand(&mut rng),
+                elg_randomness: Randomness::rand(&mut rng),
+            },
+            &mut rng,
+        )?;
 
-//let addr = Fr::from_be_bytes_mod_order(b"someassaddr");
-//let randomness = Fr::rand(&mut rng);
-//let nullifier = Fr::rand(&mut rng);
-//let vote_id = Fr::from(0);
+        let elg_param = ElGamal::<EdwardsProjective>::setup(&mut rng)?;
+        let (elg_pk, _sk) = ElGamal::keygen(&elg_param, &mut rng)?;
+        let elg_randomness = Randomness::<EdwardsProjective>::rand(&mut rng);
 
-//let nullifier_hash = poseidon.hash_two(&nullifier, &vote_id)?;
-//let commitment = poseidon.hash_two(&poseidon.hash_two(&addr, &randomness)?, &nullifier)?;
-//let addr_hashed = poseidon.hash_two(&addr, &addr)?;
+        let addr = Fr::from_be_bytes_mod_order(b"someassaddr");
+        let balance = Fr::from(100);
+        let randomness = Fr::rand(&mut rng);
+        let nullifier = Fr::rand(&mut rng);
+        let vote_id = Fr::from(0);
 
-//whitelist_tree.insert_batch(&BTreeMap::from_iter([(0, addr_hashed)]), &poseidon)?;
-//commitment_tree.insert_batch(&BTreeMap::from_iter([(0, commitment)]), &poseidon)?;
+        let before_result = ElGamal::encrypt(
+            &elg_param,
+            &elg_pk,
+            &EdwardsAffine::prime_subgroup_generator()
+                .mul(Fr::zero())
+                .into_affine(),
+            &elg_randomness,
+        )?;
 
-//let proof = Groth16::<Bls12_381>::prove(
-//&pk,
-//VotingCommitmentBalanceCircuit::<5> {
-//hasher: poseidon.clone(),
-//nullifier_hash,
-//vote_id,
-//commitment_root: commitment_tree.root(),
-//whitelist_root: whitelist_tree.root(),
-//address: addr,
-//randomness,
-//nullifier,
-//commitment_proof: commitment_tree.generate_membership_proof(0),
-//whitelist_proof: whitelist_tree.generate_membership_proof(0),
-//},
-//&mut rng,
-//)?;
+        let balance_affine = EdwardsAffine::prime_subgroup_generator()
+            .mul(balance)
+            .into_affine();
 
-//let verified = Groth16::verify(
-//&vk,
-//&[
-//commitment_tree.root(),
-//whitelist_tree.root(),
-//nullifier_hash,
-//vote_id,
-//],
-//&proof,
-//)?;
+        let balance_encrypted =
+            ElGamal::encrypt(&elg_param, &elg_pk, &balance_affine, &elg_randomness)?;
 
-//assert!(verified);
+        let after_result = (
+            before_result.0 + balance_encrypted.0,
+            before_result.1 + balance_encrypted.1,
+        );
 
-//Ok(())
-//}
-//}
+        let nullifier_hash = poseidon.hash_two(&nullifier, &vote_id)?;
+        let commitment = poseidon.hash_two(&poseidon.hash_two(&addr, &randomness)?, &nullifier)?;
+        let whitelist_leaf = poseidon.hash_two(&addr, &balance)?;
+
+        whitelist_tree.insert_batch(&BTreeMap::from_iter([(0, whitelist_leaf)]), &poseidon)?;
+        commitment_tree.insert_batch(&BTreeMap::from_iter([(0, commitment)]), &poseidon)?;
+
+        let proof = Groth16::<Bls12_381>::prove(
+            &pk,
+            VotingCommitmentBalanceCircuit::<5> {
+                hasher: poseidon.clone(),
+                nullifier_hash,
+                vote_id,
+                commitment_root: commitment_tree.root(),
+                whitelist_root: whitelist_tree.root(),
+                address: addr,
+                randomness,
+                nullifier,
+                commitment_proof: commitment_tree.generate_membership_proof(0),
+                whitelist_proof: whitelist_tree.generate_membership_proof(0),
+                elg_param: elg_param.generator,
+                elg_pk,
+                before_result,
+                after_result,
+                balance,
+                balance_affine,
+                elg_randomness,
+            },
+            &mut rng,
+        )?;
+
+        println!("Proof {:?}", proof);
+
+        let verified = Groth16::verify(
+            &vk,
+            &[
+                commitment_tree.root(),
+                whitelist_tree.root(),
+                nullifier_hash,
+                vote_id,
+                elg_param.generator.x,
+                elg_param.generator.y,
+                elg_pk.x,
+                elg_pk.y,
+                before_result.0.x,
+                before_result.0.y,
+                before_result.1.x,
+                before_result.1.y,
+                after_result.0.x,
+                after_result.0.y,
+                after_result.1.x,
+                after_result.1.y,
+            ],
+            &proof,
+        )?;
+
+        println!("Is verified {}", verified);
+
+        assert!(verified);
+
+        Ok(())
+    }
+}
