@@ -296,3 +296,57 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
             .ok_or(SystemError::ExceedMaxLookup)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::error::Error;
+
+    use ark_bls12_381::Fr;
+    use ark_ff::{PrimeField, UniformRand};
+    use ark_std::test_rng;
+    use arkworks_native_gadgets::poseidon::FieldHasher;
+
+    use crate::system::error::SystemError;
+
+    use super::VotingCommitmentBalanceSystem;
+
+    #[test]
+    #[ignore = "Long compute time ~44.67s"]
+    fn vote() -> Result<(), Box<dyn Error>> {
+        let mut system = VotingCommitmentBalanceSystem::<_, 10, 1000>::setup(test_rng(), 0)?;
+
+        let address = Fr::from_be_bytes_mod_order(b"someassaddr");
+        let balance = Fr::from(100);
+        let randomness = Fr::rand(&mut system.rng);
+        let nullifier = Fr::rand(&mut system.rng);
+        let commitment = system
+            .hasher
+            .hash_two(&system.hasher.hash_two(&address, &randomness)?, &nullifier)?;
+
+        let regis_proof =
+            system.generate_commitment_proof(commitment, address, randomness, nullifier)?;
+        let commitment_idx = system.insert_commitment(commitment, address, &regis_proof)?;
+        let whitelist_idx = system.insert_whitelist(address, balance)?;
+
+        let (vote_proof, nullifier_hash, after_result) = system.generate_voting_proof(
+            whitelist_idx,
+            commitment_idx,
+            address,
+            randomness,
+            nullifier,
+            balance,
+        )?;
+
+        assert_eq!(system.decode_current_result()?, 0);
+
+        system.vote(nullifier_hash, after_result, &vote_proof)?;
+
+        let err = system
+            .vote(nullifier_hash, after_result, &vote_proof)
+            .unwrap_err();
+        assert_eq!(err, SystemError::InvalidProof);
+        assert_eq!(system.decode_current_result()?, 100);
+
+        Ok(())
+    }
+}
