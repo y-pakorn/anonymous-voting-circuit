@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, BTreeMap, HashMap};
 
 use ark_bls12_381::{Bls12_381, Fr};
 use ark_crypto_primitives::{
@@ -13,7 +13,10 @@ use ark_ed_on_bls12_381::{EdwardsAffine, EdwardsProjective};
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use ark_groth16::{Groth16, Proof, ProvingKey, VerifyingKey};
 use ark_std::rand::{CryptoRng, Rng};
-use arkworks_native_gadgets::{merkle_tree::SparseMerkleTree, poseidon::Poseidon};
+use arkworks_native_gadgets::{
+    merkle_tree::SparseMerkleTree,
+    poseidon::{FieldHasher, Poseidon},
+};
 use arkworks_utils::Curve;
 
 use crate::{
@@ -146,97 +149,150 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
         )?)
     }
 
-    //pub fn generate_voting_proof(
-    //&mut self,
-    //whitelist_index: u32,
-    //commitment_index: u32,
-    //nullifier_hash: Fr,
-    //address: Fr,
-    //randomness: Fr,
-    //nullifier: Fr,
-    //) -> Result<Proof<Bls12_381>, SystemError> {
-    //Ok(Groth16::prove(
-    //&self.vote_key.0,
-    //VotingCommitmentCircuit::<N> {
-    //commitment_root: self.commitment_tree.root(),
-    //whitelist_root: self.whitelist_tree.root(),
-    //nullifier_hash,
-    //vote_id: Fr::from(self.vote_id),
-    //address,
-    //randomness,
-    //nullifier,
-    //commitment_proof: self
-    //.commitment_tree
-    //.generate_membership_proof(commitment_index as u64),
-    //whitelist_proof: self
-    //.whitelist_tree
-    //.generate_membership_proof(whitelist_index as u64),
-    //hasher: self.hasher.clone(),
-    //},
-    //&mut self.rng,
-    //)?)
-    //}
+    pub fn generate_voting_proof(
+        &mut self,
+        whitelist_index: u32,
+        commitment_index: u32,
+        address: Fr,
+        randomness: Fr,
+        nullifier: Fr,
+        balance: Fr,
+    ) -> Result<(Proof<Bls12_381>, Fr, (EdwardsAffine, EdwardsAffine)), SystemError> {
+        let nullifier_hash = self.hasher.hash_two(&nullifier, &Fr::from(self.vote_id))?;
+        let elg_randomness = Randomness::<EdwardsProjective>::rand(&mut self.rng);
+        let balance_affine = EdwardsAffine::prime_subgroup_generator()
+            .mul(balance)
+            .into_affine();
+        let balance_encrypted = ElGamal::encrypt(
+            &self.elgamal.0,
+            &self.elgamal.1,
+            &balance_affine,
+            &elg_randomness,
+        )?;
+        let after_result = (
+            self.current_result_encoded.0 + balance_encrypted.0,
+            self.current_result_encoded.1 + balance_encrypted.1,
+        );
 
-    //pub fn insert_commitment(
-    //&mut self,
-    //commitment: Fr,
-    //address: Fr,
-    //proof: &Proof<Bls12_381>,
-    //) -> Result<u32, SystemError> {
-    //Groth16::verify(&self.registration_key.1, &[commitment, address], &proof)?
-    //.then_some(())
-    //.ok_or(SystemError::InvalidProof)?;
+        Ok((
+            Groth16::prove(
+                &self.vote_key.0,
+                VotingCommitmentBalanceCircuit::<N> {
+                    commitment_root: self.commitment_tree.root(),
+                    whitelist_root: self.whitelist_tree.root(),
+                    nullifier_hash,
+                    vote_id: Fr::from(self.vote_id),
+                    address,
+                    randomness,
+                    nullifier,
+                    commitment_proof: self
+                        .commitment_tree
+                        .generate_membership_proof(commitment_index as u64),
+                    whitelist_proof: self
+                        .whitelist_tree
+                        .generate_membership_proof(whitelist_index as u64),
+                    hasher: self.hasher.clone(),
+                    elg_param: self.elgamal.0.generator,
+                    elg_pk: self.elgamal.1,
+                    before_result: self.current_result_encoded,
+                    after_result,
+                    balance,
+                    balance_affine,
+                    elg_randomness,
+                },
+                &mut self.rng,
+            )?,
+            nullifier_hash,
+            after_result,
+        ))
+    }
 
-    //let index = self.next_commitment_idx;
+    pub fn insert_commitment(
+        &mut self,
+        commitment: Fr,
+        address: Fr,
+        proof: &Proof<Bls12_381>,
+    ) -> Result<u32, SystemError> {
+        Groth16::verify(&self.registration_key.1, &[commitment, address], &proof)?
+            .then_some(())
+            .ok_or(SystemError::InvalidProof)?;
 
-    //self.commitment_tree
-    //.insert_batch(&BTreeMap::from_iter([(index, commitment)]), &self.hasher)?;
+        let index = self.next_commitment_idx;
 
-    //self.next_commitment_idx += 1;
+        self.commitment_tree
+            .insert_batch(&BTreeMap::from_iter([(index, commitment)]), &self.hasher)?;
 
-    //Ok(index)
-    //}
+        self.next_commitment_idx += 1;
 
-    //pub fn insert_whitelist(&mut self, address: Fr) -> Result<u32, SystemError> {
-    //let addr_hashed = self.hasher.hash_two(&address, &address)?;
+        Ok(index)
+    }
 
-    //let index = self.next_whitelist_idx;
+    pub fn insert_whitelist(&mut self, address: Fr, balance: Fr) -> Result<u32, SystemError> {
+        let leaf = self.hasher.hash_two(&address, &balance)?;
 
-    //self.whitelist_tree
-    //.insert_batch(&BTreeMap::from_iter([(index, addr_hashed)]), &self.hasher)?;
+        let index = self.next_whitelist_idx;
 
-    //self.next_whitelist_idx += 1;
+        self.whitelist_tree
+            .insert_batch(&BTreeMap::from_iter([(index, leaf)]), &self.hasher)?;
 
-    //Ok(index)
-    //}
+        self.next_whitelist_idx += 1;
 
-    //pub fn vote(
-    //&mut self,
-    //nullifier_hash: Fr,
-    //proof: &Proof<Bls12_381>,
-    //) -> Result<(), SystemError> {
-    //Groth16::verify(
-    //&self.vote_key.1,
-    //&[
-    //self.commitment_tree.root(),
-    //self.whitelist_tree.root(),
-    //nullifier_hash,
-    //Fr::from(self.vote_id),
-    //],
-    //&proof,
-    //)?
-    //.then_some(())
-    //.ok_or(SystemError::InvalidProof)?;
+        Ok(index)
+    }
 
-    //match self.votes.entry(nullifier_hash) {
-    //Entry::Occupied(_) => {
-    //Err(SystemError::UsedNullifier)?;
-    //}
-    //Entry::Vacant(entry) => {
-    //entry.insert(());
-    //}
-    //};
+    pub fn vote(
+        &mut self,
+        nullifier_hash: Fr,
+        after_result: (EdwardsAffine, EdwardsAffine),
+        proof: &Proof<Bls12_381>,
+    ) -> Result<(), SystemError> {
+        Groth16::verify(
+            &self.vote_key.1,
+            &[
+                self.commitment_tree.root(),
+                self.whitelist_tree.root(),
+                nullifier_hash,
+                Fr::from(self.vote_id),
+                self.elgamal.0.generator.x,
+                self.elgamal.0.generator.y,
+                self.elgamal.1.x,
+                self.elgamal.1.y,
+                self.current_result_encoded.0.x,
+                self.current_result_encoded.0.y,
+                self.current_result_encoded.1.x,
+                self.current_result_encoded.1.y,
+                after_result.0.x,
+                after_result.0.y,
+                after_result.1.x,
+                after_result.1.y,
+            ],
+            &proof,
+        )?
+        .then_some(())
+        .ok_or(SystemError::InvalidProof)?;
 
-    //Ok(())
-    //}
+        match self.votes.entry(nullifier_hash) {
+            Entry::Occupied(_) => {
+                Err(SystemError::UsedNullifier)?;
+            }
+            Entry::Vacant(entry) => {
+                entry.insert(());
+            }
+        };
+
+        self.current_result_encoded = after_result;
+
+        Ok(())
+    }
+
+    pub fn decode_current_result(&self) -> Result<u64, SystemError> {
+        let decoded = ElGamal::decrypt(
+            &self.elgamal.0,
+            &self.elgamal.2,
+            &self.current_result_encoded,
+        )?;
+        self.lookup_table
+            .get(&decoded)
+            .ok_or(SystemError::ExceedMaxLookup)
+    }
 }
