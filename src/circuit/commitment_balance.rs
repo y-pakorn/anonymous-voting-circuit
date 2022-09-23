@@ -181,6 +181,7 @@ mod tests {
     use super::VotingCommitmentBalanceCircuit;
 
     #[test]
+    #[ignore = "Long compute time ~34.15s"]
     fn voting_commitment_balance_verify_simple() -> Result<(), Box<dyn Error>> {
         let mut rng = test_rng();
         let poseidon = Poseidon::<Fr>::new(setup_params(Curve::Bls381, 5, 5));
@@ -282,8 +283,6 @@ mod tests {
             &mut rng,
         )?;
 
-        println!("Proof {:?}", proof);
-
         let verified = Groth16::verify(
             &vk,
             &[
@@ -306,8 +305,6 @@ mod tests {
             ],
             &proof,
         )?;
-
-        println!("Is verified {}", verified);
 
         assert!(verified);
 
