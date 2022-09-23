@@ -1,26 +1,24 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::collections::HashMap;
 
 use ark_ec::{AffineCurve, ProjectiveCurve};
 
-pub struct LookupTable<A: AffineCurve> {
-    pub table: HashMap<A, u64>,
-    _phantom: PhantomData<A>,
-}
+pub struct LookupTable<A: AffineCurve>(pub HashMap<A, u64>);
 
 impl<A: AffineCurve> LookupTable<A> {
     pub fn new(values: impl IntoIterator<Item = u64>) -> Self {
         let generator = A::prime_subgroup_generator();
-        Self {
-            table: HashMap::from_iter(values.into_iter().map(|e| {
-                (
-                    <A::Projective as ProjectiveCurve>::into_affine(
-                        &generator.mul(<A::ScalarField as From<u64>>::from(e)),
-                    ),
-                    e,
-                )
-            })),
-            _phantom: PhantomData,
-        }
+        Self(HashMap::from_iter(values.into_iter().map(|e| {
+            (
+                <A::Projective as ProjectiveCurve>::into_affine(
+                    &generator.mul(<A::ScalarField as From<u64>>::from(e)),
+                ),
+                e,
+            )
+        })))
+    }
+
+    pub fn get(&self, affine: &A) -> Option<u64> {
+        self.0.get(affine).map(|e| *e)
     }
 }
 
@@ -59,7 +57,7 @@ mod tests {
 
         let table = LookupTable::<EdwardsAffine>::new(0..10);
 
-        assert_eq!(table.table.get(&dec), Some(&2));
+        assert_eq!(table.get(&dec), Some(2));
 
         Ok(())
     }
