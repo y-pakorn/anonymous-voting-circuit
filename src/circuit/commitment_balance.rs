@@ -28,10 +28,9 @@ pub struct VotingCommitmentBalanceCircuit<const N: usize> {
     pub whitelist_root: Fr,
     pub nullifier_hash: Fr,
     pub vote_id: Fr,
-    pub elg_param: EdwardsAffine,                      // affine
-    pub elg_pk: EdwardsAffine,                         // affine
-    pub before_result: (EdwardsAffine, EdwardsAffine), // (affine, affine)
-    pub after_result: (EdwardsAffine, EdwardsAffine),  // (affine, affine)
+    pub elg_param: EdwardsAffine,                          // affine
+    pub elg_pk: EdwardsAffine,                             // affine
+    pub encrypted_balance: (EdwardsAffine, EdwardsAffine), // (affine, affine)
 
     // Secret
     // whitelist = H(addr, balance)
@@ -79,13 +78,9 @@ impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentBalanceCircui
             PublicKeyVar::<EdwardsProjective, EdwardsVar>::new_input(cs.clone(), || {
                 Ok(self.elg_pk)
             })?;
-        let before_result =
+        let encrypted_balance =
             OutputVar::<EdwardsProjective, EdwardsVar>::new_input(cs.clone(), || {
-                Ok(self.before_result)
-            })?;
-        let after_result =
-            OutputVar::<EdwardsProjective, EdwardsVar>::new_input(cs.clone(), || {
-                Ok(self.after_result)
+                Ok(self.encrypted_balance)
             })?;
 
         // Secret
@@ -134,13 +129,8 @@ impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentBalanceCircui
             &hasher_var,
         )?;
 
-        // Check after_result = E(balance) + before_result
-        after_result
-            .c1
-            .enforce_equal(&(before_result.c1 + balance_encrypted.c1))?;
-        after_result
-            .c2
-            .enforce_equal(&(before_result.c2 + balance_encrypted.c2))?;
+        // Check encrypted_balance = E(balance)
+        encrypted_balance.enforce_equal(&balance_encrypted)?;
 
         // Check g * balance = balance_affine
         balance_affine_calculated.enforce_equal(&balance_affine_var)?;
@@ -212,8 +202,7 @@ mod tests {
                 whitelist_proof: whitelist_tree.generate_membership_proof(0),
                 elg_param: EdwardsAffine::rand(&mut rng),
                 elg_pk: EdwardsAffine::rand(&mut rng),
-                before_result: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
-                after_result: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
+                encrypted_balance: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
                 balance: Fr::rand(&mut rng),
                 balance_affine: EdwardsAffine::rand(&mut rng),
                 elg_randomness: Randomness::rand(&mut rng),
@@ -231,26 +220,12 @@ mod tests {
         let nullifier = Fr::rand(&mut rng);
         let vote_id = Fr::from(0);
 
-        let before_result = ElGamal::encrypt(
-            &elg_param,
-            &elg_pk,
-            &EdwardsAffine::prime_subgroup_generator()
-                .mul(Fr::zero())
-                .into_affine(),
-            &elg_randomness,
-        )?;
-
         let balance_affine = EdwardsAffine::prime_subgroup_generator()
             .mul(balance)
             .into_affine();
 
-        let balance_encrypted =
+        let encrypted_balance =
             ElGamal::encrypt(&elg_param, &elg_pk, &balance_affine, &elg_randomness)?;
-
-        let after_result = (
-            before_result.0 + balance_encrypted.0,
-            before_result.1 + balance_encrypted.1,
-        );
 
         let nullifier_hash = poseidon.hash_two(&nullifier, &vote_id)?;
         let commitment = poseidon.hash_two(&poseidon.hash_two(&addr, &randomness)?, &nullifier)?;
@@ -274,8 +249,7 @@ mod tests {
                 whitelist_proof: whitelist_tree.generate_membership_proof(0),
                 elg_param: elg_param.generator,
                 elg_pk,
-                before_result,
-                after_result,
+                encrypted_balance,
                 balance,
                 balance_affine,
                 elg_randomness,
@@ -294,14 +268,10 @@ mod tests {
                 elg_param.generator.y,
                 elg_pk.x,
                 elg_pk.y,
-                before_result.0.x,
-                before_result.0.y,
-                before_result.1.x,
-                before_result.1.y,
-                after_result.0.x,
-                after_result.0.y,
-                after_result.1.x,
-                after_result.1.y,
+                encrypted_balance.0.x,
+                encrypted_balance.0.y,
+                encrypted_balance.1.x,
+                encrypted_balance.1.y,
             ],
             &proof,
         )?;
