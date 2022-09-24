@@ -79,8 +79,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
                 whitelist_proof: whitelist_tree.generate_membership_proof(0),
                 elg_param: EdwardsAffine::rand(&mut rng),
                 elg_pk: EdwardsAffine::rand(&mut rng),
-                before_result: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
-                after_result: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
+                encrypted_balance: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
                 balance: Fr::rand(&mut rng),
                 balance_affine: EdwardsAffine::rand(&mut rng),
                 elg_randomness: Randomness::rand(&mut rng),
@@ -163,16 +162,12 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
         let balance_affine = EdwardsAffine::prime_subgroup_generator()
             .mul(balance)
             .into_affine();
-        let balance_encrypted = ElGamal::encrypt(
+        let encrypted_balance = ElGamal::encrypt(
             &self.elgamal.0,
             &self.elgamal.1,
             &balance_affine,
             &elg_randomness,
         )?;
-        let after_result = (
-            self.current_result_encoded.0 + balance_encrypted.0,
-            self.current_result_encoded.1 + balance_encrypted.1,
-        );
 
         Ok((
             Groth16::prove(
@@ -194,8 +189,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
                     hasher: self.hasher.clone(),
                     elg_param: self.elgamal.0.generator,
                     elg_pk: self.elgamal.1,
-                    before_result: self.current_result_encoded,
-                    after_result,
+                    encrypted_balance,
                     balance,
                     balance_affine,
                     elg_randomness,
@@ -203,7 +197,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
                 &mut self.rng,
             )?,
             nullifier_hash,
-            after_result,
+            encrypted_balance,
         ))
     }
 
@@ -243,7 +237,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
     pub fn vote(
         &mut self,
         nullifier_hash: Fr,
-        after_result: (EdwardsAffine, EdwardsAffine),
+        encrypted_balance: (EdwardsAffine, EdwardsAffine),
         proof: &Proof<Bls12_381>,
     ) -> Result<(), SystemError> {
         Groth16::verify(
@@ -257,14 +251,10 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
                 self.elgamal.0.generator.y,
                 self.elgamal.1.x,
                 self.elgamal.1.y,
-                self.current_result_encoded.0.x,
-                self.current_result_encoded.0.y,
-                self.current_result_encoded.1.x,
-                self.current_result_encoded.1.y,
-                after_result.0.x,
-                after_result.0.y,
-                after_result.1.x,
-                after_result.1.y,
+                encrypted_balance.0.x,
+                encrypted_balance.0.y,
+                encrypted_balance.1.x,
+                encrypted_balance.1.y,
             ],
             &proof,
         )?
@@ -280,7 +270,8 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
             }
         };
 
-        self.current_result_encoded = after_result;
+        self.current_result_encoded.0 += encrypted_balance.0;
+        self.current_result_encoded.1 += encrypted_balance.1;
 
         Ok(())
     }
@@ -328,7 +319,7 @@ mod tests {
         let commitment_idx = system.insert_commitment(commitment, address, &regis_proof)?;
         let whitelist_idx = system.insert_whitelist(address, balance)?;
 
-        let (vote_proof, nullifier_hash, after_result) = system.generate_voting_proof(
+        let (vote_proof, nullifier_hash, encrypted_balance) = system.generate_voting_proof(
             whitelist_idx,
             commitment_idx,
             address,
@@ -339,12 +330,12 @@ mod tests {
 
         assert_eq!(system.decode_current_result()?, 0);
 
-        system.vote(nullifier_hash, after_result, &vote_proof)?;
+        system.vote(nullifier_hash, encrypted_balance, &vote_proof)?;
 
         let err = system
-            .vote(nullifier_hash, after_result, &vote_proof)
+            .vote(nullifier_hash, encrypted_balance, &vote_proof)
             .unwrap_err();
-        assert_eq!(err, SystemError::InvalidProof);
+        assert_eq!(err, SystemError::UsedNullifier);
         assert_eq!(system.decode_current_result()?, 100);
 
         Ok(())
