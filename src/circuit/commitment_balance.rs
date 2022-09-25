@@ -150,6 +150,9 @@ where
 
         // Check g * balance = balance_affine
         balance_affine_calculated.enforce_equal(&balance_affine_var)?;
+        balance_plaintext_var
+            .plaintext
+            .enforce_equal(&balance_affine_var)?;
 
         nullifier_hash_var.enforce_equal(&nullifier_hashed)?;
         is_correct_whitelist.enforce_equal(&Boolean::TRUE)?;
@@ -187,7 +190,7 @@ mod tests {
     use super::VotingCommitmentBalanceCircuit;
 
     #[test]
-    #[ignore = "Long compute time ~34.15s"]
+    #[ignore = "Long compute time ~33.6s"]
     fn voting_commitment_balance_verify_simple() -> Result<(), Box<dyn Error>> {
         let mut rng = test_rng();
         let poseidon = Poseidon::<Fr>::new(setup_params(Curve::Bls381, 5, 5));
