@@ -83,6 +83,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
                 balance: Fr::rand(&mut rng),
                 balance_affine: EdwardsAffine::rand(&mut rng),
                 elg_randomness: Randomness::rand(&mut rng),
+                _p: std::marker::PhantomData,
             },
             &mut rng,
         )?;
@@ -193,6 +194,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
                     balance,
                     balance_affine,
                     elg_randomness,
+                    _p: std::marker::PhantomData,
                 },
                 &mut self.rng,
             )?,
