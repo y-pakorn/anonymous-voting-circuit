@@ -1,4 +1,5 @@
 use ark_bls12_381::Fr;
+use ark_ff::PrimeField;
 use ark_r1cs_std::{
     fields::fp::FpVar,
     prelude::{AllocVar, Boolean, EqGadget},
@@ -10,33 +11,37 @@ use arkworks_r1cs_gadgets::{
     poseidon::{FieldHasherGadget, PoseidonGadget},
 };
 
-pub struct VotingCommitmentCircuit<const N: usize> {
+pub type VotingCommitmentCircuit<const N: usize> =
+    VotingCommitmentCircuitGeneric<Fr, PoseidonGadget<Fr>, N>;
+
+pub struct VotingCommitmentCircuitGeneric<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> {
     // Public
-    pub commitment_root: Fr,
-    pub whitelist_root: Fr,
-    pub nullifier_hash: Fr,
-    pub vote_id: Fr,
+    pub commitment_root: F,
+    pub whitelist_root: F,
+    pub nullifier_hash: F,
+    pub vote_id: F,
 
     // Secret
     // commitment = H(H(addr, r), nullifier)
-    pub address: Fr,
-    pub randomness: Fr,
-    pub nullifier: Fr,
-    pub commitment_proof: Path<Fr, <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native, N>,
-    pub whitelist_proof: Path<Fr, <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native, N>,
+    pub address: F,
+    pub randomness: F,
+    pub nullifier: F,
+    pub commitment_proof: Path<F, HG::Native, N>,
+    pub whitelist_proof: Path<F, HG::Native, N>,
 
     // Utils
-    pub hasher: <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native,
+    pub hasher: HG::Native,
 }
 
-impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentCircuit<N> {
+impl<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> ConstraintSynthesizer<F>
+    for VotingCommitmentCircuitGeneric<F, HG, N>
+{
     fn generate_constraints(
         self,
-        cs: ark_relations::r1cs::ConstraintSystemRef<Fr>,
+        cs: ark_relations::r1cs::ConstraintSystemRef<F>,
     ) -> ark_relations::r1cs::Result<()> {
         // Hasher
-        let hasher_var: PoseidonGadget<Fr> =
-            FieldHasherGadget::<Fr>::from_native(&mut cs.clone(), self.hasher)?;
+        let hasher_var: HG = FieldHasherGadget::<F>::from_native(&mut cs.clone(), self.hasher)?;
 
         // Public
         let commitment_root_var = FpVar::new_input(cs.clone(), || Ok(self.commitment_root))?;
@@ -49,13 +54,9 @@ impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentCircuit<N> {
         let randomness_var = FpVar::new_witness(cs.clone(), || Ok(self.randomness))?;
         let nullifier_var = FpVar::new_witness(cs.clone(), || Ok(self.nullifier))?;
         let commitment_proof_var =
-            PathVar::<Fr, PoseidonGadget<Fr>, N>::new_witness(cs.clone(), || {
-                Ok(self.commitment_proof)
-            })?;
+            PathVar::<F, HG, N>::new_witness(cs.clone(), || Ok(self.commitment_proof))?;
         let whitelist_proof_var =
-            PathVar::<Fr, PoseidonGadget<Fr>, N>::new_witness(cs.clone(), || {
-                Ok(self.whitelist_proof)
-            })?;
+            PathVar::<F, HG, N>::new_witness(cs.clone(), || Ok(self.whitelist_proof))?;
 
         let secret = hasher_var.hash_two(&address_var, &randomness_var)?;
         let commitment = hasher_var.hash_two(&secret, &nullifier_var)?;
