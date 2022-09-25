@@ -1,8 +1,11 @@
-use ark_ff::PrimeField;
+use ark_ec::ProjectiveCurve;
+use ark_ff::{Field, PrimeField};
 use arkworks_native_gadgets::poseidon::{sbox::PoseidonSbox, PoseidonParameters};
 use arkworks_utils::{
     bytes_matrix_to_f, bytes_vec_to_f, poseidon_params::setup_poseidon_params, Curve,
 };
+
+pub type ConstraintF<C> = <<C as ProjectiveCurve>::BaseField as Field>::BasePrimeField;
 
 pub fn setup_params<F: PrimeField>(curve: Curve, exp: i8, width: u8) -> PoseidonParameters<F> {
     let pos_data = setup_poseidon_params(curve, exp, width).unwrap();

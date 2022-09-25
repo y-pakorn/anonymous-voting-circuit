@@ -12,7 +12,6 @@ use ark_crypto_primitives::encryption::{
 };
 use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsProjective};
-use ark_ff::Field;
 use ark_r1cs_std::{
     fields::fp::FpVar,
     prelude::{AllocVar, Boolean, CurveVar, EqGadget, GroupOpsBounds},
@@ -25,10 +24,10 @@ use arkworks_r1cs_gadgets::{
     poseidon::{FieldHasherGadget, PoseidonGadget},
 };
 
+use crate::utils::ConstraintF;
+
 pub type VotingCommitmentBalanceCircuit<const N: usize> =
     VotingCommitmentBalanceCircuitGeneric<EdwardsProjective, PoseidonGadget<Fr>, EdwardsVar, N>;
-
-pub type ConstraintF<C> = <<C as ProjectiveCurve>::BaseField as Field>::BasePrimeField;
 
 pub struct VotingCommitmentBalanceCircuitGeneric<
     C: ProjectiveCurve,
