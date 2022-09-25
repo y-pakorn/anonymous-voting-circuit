@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use ark_bls12_381::Fr;
 use ark_crypto_primitives::encryption::{
     elgamal::{
@@ -8,11 +10,12 @@ use ark_crypto_primitives::encryption::{
     },
     AsymmetricEncryptionGadget,
 };
-use ark_ec::AffineCurve;
-use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsAffine, EdwardsProjective};
+use ark_ec::{AffineCurve, ProjectiveCurve};
+use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsProjective};
+use ark_ff::Field;
 use ark_r1cs_std::{
     fields::fp::FpVar,
-    prelude::{AllocVar, Boolean, CurveVar, EqGadget},
+    prelude::{AllocVar, Boolean, CurveVar, EqGadget, GroupOpsBounds},
     ToBitsGadget,
 };
 use ark_relations::r1cs::ConstraintSynthesizer;
@@ -22,44 +25,68 @@ use arkworks_r1cs_gadgets::{
     poseidon::{FieldHasherGadget, PoseidonGadget},
 };
 
-pub struct VotingCommitmentBalanceCircuit<const N: usize> {
+pub type VotingCommitmentBalanceCircuit<const N: usize> =
+    VotingCommitmentBalanceCircuitGeneric<EdwardsProjective, PoseidonGadget<Fr>, EdwardsVar, N>;
+
+pub type ConstraintF<C> = <<C as ProjectiveCurve>::BaseField as Field>::BasePrimeField;
+
+pub struct VotingCommitmentBalanceCircuitGeneric<
+    C: ProjectiveCurve,
+    HG: FieldHasherGadget<ConstraintF<C>>,
+    CV: CurveVar<C, ConstraintF<C>>,
+    const N: usize,
+> where
+    for<'a> &'a CV: GroupOpsBounds<'a, C, CV>,
+{
     // Public
-    pub commitment_root: Fr,
-    pub whitelist_root: Fr,
-    pub nullifier_hash: Fr,
-    pub vote_id: Fr,
-    pub elg_param: EdwardsAffine,                          // affine
-    pub elg_pk: EdwardsAffine,                             // affine
-    pub encrypted_balance: (EdwardsAffine, EdwardsAffine), // (affine, affine)
+    pub commitment_root: ConstraintF<C>,
+    pub whitelist_root: ConstraintF<C>,
+    pub nullifier_hash: ConstraintF<C>,
+    pub vote_id: ConstraintF<C>,
+    pub elg_param: C::Affine,                      // affine
+    pub elg_pk: C::Affine,                         // affine
+    pub encrypted_balance: (C::Affine, C::Affine), // (affine, affine)
 
     // Secret
     // whitelist = H(addr, balance)
     // commitment = H(H(addr, randomness), nullifier)
-    pub address: Fr,
-    pub randomness: Fr,
-    pub nullifier: Fr,
-    pub commitment_proof: Path<Fr, <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native, N>,
-    pub whitelist_proof: Path<Fr, <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native, N>,
-    pub balance: Fr,
-    pub balance_affine: EdwardsAffine,
-    pub elg_randomness: ElGamalRandomness<EdwardsProjective>, // Scalar field in ed
+    pub address: ConstraintF<C>,
+    pub randomness: ConstraintF<C>,
+    pub nullifier: ConstraintF<C>,
+    pub commitment_proof: Path<ConstraintF<C>, HG::Native, N>,
+    pub whitelist_proof: Path<ConstraintF<C>, HG::Native, N>,
+    pub balance: ConstraintF<C>,
+    pub balance_affine: C::Affine,
+    pub elg_randomness: ElGamalRandomness<C>, // Scalar field in ed
 
     // Utils
-    pub hasher: <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native,
+    pub hasher: HG::Native,
+    pub _p: PhantomData<CV>,
 }
 
-impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentBalanceCircuit<N> {
+impl<
+        C: ProjectiveCurve,
+        HG: FieldHasherGadget<ConstraintF<C>>,
+        CV: CurveVar<C, ConstraintF<C>>,
+        const N: usize,
+    > ConstraintSynthesizer<ConstraintF<C>> for VotingCommitmentBalanceCircuitGeneric<C, HG, CV, N>
+where
+    for<'a> &'a CV: GroupOpsBounds<'a, C, CV>,
+{
     fn generate_constraints(
         self,
-        cs: ark_relations::r1cs::ConstraintSystemRef<Fr>,
+        cs: ark_relations::r1cs::ConstraintSystemRef<ConstraintF<C>>,
     ) -> ark_relations::r1cs::Result<()> {
         // Constant
-        let generator_var =
-            EdwardsVar::new_constant(cs.clone(), EdwardsAffine::prime_subgroup_generator())?;
+        //let generator_var =
+        //EdwardsVar::new_constant(cs.clone(), C::Affine::prime_subgroup_generator())?;
+        let generator_var: CV = <CV as AllocVar<_, _>>::new_constant(
+            cs.clone(),
+            <C::Affine as AffineCurve>::prime_subgroup_generator(),
+        )?;
 
         // Hasher
-        let hasher_var: PoseidonGadget<Fr> =
-            FieldHasherGadget::<Fr>::from_native(&mut cs.clone(), self.hasher)?;
+        let hasher_var: HG = FieldHasherGadget::from_native(&mut cs.clone(), self.hasher)?;
 
         // Public
         let commitment_root_var = FpVar::new_input(cs.clone(), || Ok(self.commitment_root))?;
@@ -68,39 +95,28 @@ impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentBalanceCircui
         let vote_id_var = FpVar::new_input(cs.clone(), || Ok(self.vote_id))?;
 
         // Public ElGamal
-        let elg_param_var =
-            ParametersVar::<EdwardsProjective, EdwardsVar>::new_input(cs.clone(), || {
-                Ok(ElGamalParameters {
-                    generator: self.elg_param,
-                })
-            })?;
-        let elg_pk_var =
-            PublicKeyVar::<EdwardsProjective, EdwardsVar>::new_input(cs.clone(), || {
-                Ok(self.elg_pk)
-            })?;
+        let elg_param_var = ParametersVar::<C, CV>::new_input(cs.clone(), || {
+            Ok(ElGamalParameters {
+                generator: self.elg_param,
+            })
+        })?;
+        let elg_pk_var = PublicKeyVar::<C, CV>::new_input(cs.clone(), || Ok(self.elg_pk))?;
         let encrypted_balance =
-            OutputVar::<EdwardsProjective, EdwardsVar>::new_input(cs.clone(), || {
-                Ok(self.encrypted_balance)
-            })?;
+            OutputVar::<C, CV>::new_input(cs.clone(), || Ok(self.encrypted_balance))?;
 
         // Secret
         let address_var = FpVar::new_witness(cs.clone(), || Ok(self.address))?;
         let randomness_var = FpVar::new_witness(cs.clone(), || Ok(self.randomness))?;
         let nullifier_var = FpVar::new_witness(cs.clone(), || Ok(self.nullifier))?;
         let commitment_proof_var =
-            PathVar::<Fr, PoseidonGadget<Fr>, N>::new_witness(cs.clone(), || {
-                Ok(self.commitment_proof)
-            })?;
+            PathVar::<_, _, N>::new_witness(cs.clone(), || Ok(self.commitment_proof))?;
         let whitelist_proof_var =
-            PathVar::<Fr, PoseidonGadget<Fr>, N>::new_witness(cs.clone(), || {
-                Ok(self.whitelist_proof)
-            })?;
+            PathVar::<_, _, N>::new_witness(cs.clone(), || Ok(self.whitelist_proof))?;
         let balance_var = FpVar::new_witness(cs.clone(), || Ok(self.balance))?;
-        let balance_affine_var = EdwardsVar::new_witness(cs.clone(), || Ok(self.balance_affine))?;
+        let balance_affine_var: CV =
+            <CV as AllocVar<_, _>>::new_witness(cs.clone(), || Ok(self.balance_affine))?;
         let balance_plaintext_var =
-            PlaintextVar::<EdwardsProjective, EdwardsVar>::new_witness(cs.clone(), || {
-                Ok(self.balance_affine)
-            })?;
+            PlaintextVar::<C, CV>::new_witness(cs.clone(), || Ok(self.balance_affine))?;
         let elg_randomness_var =
             RandomnessVar::new_witness(cs.clone(), || Ok(self.elg_randomness))?;
 
@@ -111,7 +127,7 @@ impl<const N: usize> ConstraintSynthesizer<Fr> for VotingCommitmentBalanceCircui
 
         let balance_affine_calculated =
             generator_var.scalar_mul_le(balance_var.to_bits_le()?.iter())?;
-        let balance_encrypted = ElGamalEncGadget::<EdwardsProjective, EdwardsVar>::encrypt(
+        let balance_encrypted = ElGamalEncGadget::<C, CV>::encrypt(
             &elg_param_var,
             &balance_plaintext_var,
             &elg_randomness_var,
@@ -206,6 +222,7 @@ mod tests {
                 balance: Fr::rand(&mut rng),
                 balance_affine: EdwardsAffine::rand(&mut rng),
                 elg_randomness: Randomness::rand(&mut rng),
+                _p: std::marker::PhantomData,
             },
             &mut rng,
         )?;
@@ -253,6 +270,7 @@ mod tests {
                 balance,
                 balance_affine,
                 elg_randomness,
+                _p: std::marker::PhantomData,
             },
             &mut rng,
         )?;
