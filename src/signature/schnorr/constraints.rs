@@ -36,7 +36,7 @@ pub struct PublicKeyVar<C: ProjectiveCurve, GC: CurveVar<C, ConstraintF<C>>>
 where
     for<'a> &'a GC: GroupOpsBounds<'a, C, GC>,
 {
-    pub_key: GC,
+    pub pub_key: GC,
     #[doc(hidden)]
     _group: PhantomData<*const C>,
 }
