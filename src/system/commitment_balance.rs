@@ -99,8 +99,8 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
             &mut rng,
         )?;
 
-        let param = ElGamal::<EdwardsProjective>::setup(&mut rng).unwrap();
-        let (pk, sk) = ElGamal::keygen(&param, &mut rng).unwrap();
+        let param = ElGamal::<EdwardsProjective>::setup(&mut rng)?;
+        let (pk, sk) = ElGamal::keygen(&param, &mut rng)?;
         let randomness = Randomness::<EdwardsProjective>::rand(&mut rng);
         let zero = ElGamal::encrypt(
             &param,
@@ -109,8 +109,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
                 .mul(Fr::zero())
                 .into_affine(),
             &randomness,
-        )
-        .unwrap();
+        )?;
 
         Ok(Self {
             rng,

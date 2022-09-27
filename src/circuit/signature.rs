@@ -195,8 +195,8 @@ mod tests {
                 tree.root(),
                 nullifier,
                 vote_id,
-                param.to_field_elements().unwrap()[0],
-                param.to_field_elements().unwrap()[1],
+                param.generator.x,
+                param.generator.y,
             ],
             &proof,
         )?;
