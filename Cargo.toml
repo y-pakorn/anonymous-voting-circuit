@@ -10,6 +10,7 @@ ark-ff = { version = "^0.3.0", default-features = false }
 ark-ec = { version = "^0.3.0", default-features = false }
 ark-ed-on-bls12-381 = { version = "^0.3.0", features = ["r1cs"] }
 ark-bls12-381 = { version = "^0.3.0", default-features = false, features = ["curve"] }
+ark-bn254 = { version = "^0.3.0", default-features = false, features = ["curve"] }
 ark-std = { version = "^0.3.0", default-features = false }
 ark-relations = { version = "^0.3.0", default-features = false }
 
@@ -27,7 +28,6 @@ derivative = { version = "2.0", features = ["use_core"] }
 
 arkworks-native-gadgets = { version = "^1.0.0", default-features = false }
 arkworks-r1cs-gadgets = { version = "^1.0.0", default-features = false }
-arkworks-utils = { version = "^1.0.1", default-features = false, features = ["poseidon_bls381_x5_5"] }
+arkworks-utils = { version = "^1.0.1", default-features = false, features = ["poseidon_bls381_x5_5","poseidon_bn254_x5_5"] }
 
 thiserror = "1.0.35"
-elastic-elgamal = "0.2.1"
