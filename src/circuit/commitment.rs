@@ -86,71 +86,74 @@ impl<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> ConstraintSynthesi
 mod tests {
     use std::{collections::BTreeMap, error::Error, iter::FromIterator};
 
-    use ark_bls12_381::{Bls12_381, Fr};
+    use ark_bls12_381::Bls12_381;
+    use ark_bn254::Bn254;
     use ark_crypto_primitives::{CircuitSpecificSetupSNARK, SNARK};
+    use ark_ec::PairingEngine;
     use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
     use ark_groth16::Groth16;
-    use ark_std::test_rng;
+    use ark_std::{
+        rand::{CryptoRng, Rng},
+        test_rng,
+    };
     use arkworks_native_gadgets::{
         merkle_tree::SparseMerkleTree,
         poseidon::{FieldHasher, Poseidon},
     };
+    use arkworks_r1cs_gadgets::poseidon::{FieldHasherGadget, PoseidonGadget};
     use arkworks_utils::Curve;
 
-    use crate::utils::setup_params;
+    use crate::{circuit::commitment::VotingCommitmentCircuitGeneric, utils::setup_params};
 
-    use super::VotingCommitmentCircuit;
+    fn verify_generic<P: PairingEngine, HG: FieldHasherGadget<P::Fr>, R: Rng + CryptoRng>(
+        mut rng: R,
+        hasher: HG::Native,
+    ) -> Result<(), Box<dyn Error>> {
+        let zero = P::Fr::zero();
 
-    #[test]
-    #[ignore = "Long compute time ~16.2s"]
-    fn voting_commitment_verify_simple() -> Result<(), Box<dyn Error>> {
-        let mut rng = test_rng();
-        let poseidon = Poseidon::<Fr>::new(setup_params(Curve::Bls381, 5, 5));
-        let zero = Fr::zero();
-
-        let mut commitment_tree = SparseMerkleTree::<_, _, 5>::new_sequential(
+        let mut commitment_tree = SparseMerkleTree::<P::Fr, HG::Native, 5>::new_sequential(
             &[],
-            &poseidon,
+            &hasher,
             &zero.into_repr().to_bytes_be(),
         )?;
-        let mut whitelist_tree = SparseMerkleTree::<_, _, 5>::new_sequential(
+        let mut whitelist_tree = SparseMerkleTree::<P::Fr, HG::Native, 5>::new_sequential(
             &[],
-            &poseidon,
+            &hasher,
             &zero.into_repr().to_bytes_be(),
         )?;
 
-        let (pk, vk) = Groth16::<Bls12_381>::setup(
-            VotingCommitmentCircuit::<5> {
-                hasher: poseidon.clone(),
-                nullifier_hash: Fr::rand(&mut rng),
-                vote_id: Fr::rand(&mut rng),
-                commitment_root: Fr::rand(&mut rng),
-                whitelist_root: Fr::rand(&mut rng),
-                address: Fr::rand(&mut rng),
-                randomness: Fr::rand(&mut rng),
-                nullifier: Fr::rand(&mut rng),
+        let (pk, vk) = Groth16::<P>::setup(
+            VotingCommitmentCircuitGeneric::<P::Fr, HG, 5> {
+                hasher: hasher.clone(),
+                nullifier_hash: P::Fr::rand(&mut rng),
+                vote_id: P::Fr::rand(&mut rng),
+                commitment_root: P::Fr::rand(&mut rng),
+                whitelist_root: P::Fr::rand(&mut rng),
+                address: P::Fr::rand(&mut rng),
+                randomness: P::Fr::rand(&mut rng),
+                nullifier: P::Fr::rand(&mut rng),
                 commitment_proof: commitment_tree.generate_membership_proof(0),
                 whitelist_proof: whitelist_tree.generate_membership_proof(0),
             },
             &mut rng,
         )?;
 
-        let addr = Fr::from_be_bytes_mod_order(b"someassaddr");
-        let randomness = Fr::rand(&mut rng);
-        let nullifier = Fr::rand(&mut rng);
-        let vote_id = Fr::from(0);
+        let addr = P::Fr::from_be_bytes_mod_order(b"someassaddr");
+        let randomness = P::Fr::rand(&mut rng);
+        let nullifier = P::Fr::rand(&mut rng);
+        let vote_id = P::Fr::zero();
 
-        let nullifier_hash = poseidon.hash_two(&nullifier, &vote_id)?;
-        let commitment = poseidon.hash_two(&poseidon.hash_two(&addr, &randomness)?, &nullifier)?;
-        let addr_hashed = poseidon.hash_two(&addr, &addr)?;
+        let nullifier_hash = hasher.hash_two(&nullifier, &vote_id)?;
+        let commitment = hasher.hash_two(&hasher.hash_two(&addr, &randomness)?, &nullifier)?;
+        let addr_hashed = hasher.hash_two(&addr, &addr)?;
 
-        whitelist_tree.insert_batch(&BTreeMap::from_iter([(0, addr_hashed)]), &poseidon)?;
-        commitment_tree.insert_batch(&BTreeMap::from_iter([(0, commitment)]), &poseidon)?;
+        whitelist_tree.insert_batch(&BTreeMap::from_iter([(0, addr_hashed)]), &hasher)?;
+        commitment_tree.insert_batch(&BTreeMap::from_iter([(0, commitment)]), &hasher)?;
 
-        let proof = Groth16::<Bls12_381>::prove(
+        let proof = Groth16::<P>::prove(
             &pk,
-            VotingCommitmentCircuit::<5> {
-                hasher: poseidon.clone(),
+            VotingCommitmentCircuitGeneric::<P::Fr, HG, 5> {
+                hasher: hasher.clone(),
                 nullifier_hash,
                 vote_id,
                 commitment_root: commitment_tree.root(),
@@ -178,5 +181,23 @@ mod tests {
         assert!(verified);
 
         Ok(())
+    }
+
+    #[test]
+    #[ignore = "Long compute time ~16.17s"]
+    fn verify_bls12_381() -> Result<(), Box<dyn Error>> {
+        verify_generic::<Bls12_381, PoseidonGadget<_>, _>(
+            test_rng(),
+            Poseidon::new(setup_params(Curve::Bls381, 5, 5)),
+        )
+    }
+
+    #[test]
+    #[ignore = "Long compute time ~10.638s"]
+    fn verify_bn254() -> Result<(), Box<dyn Error>> {
+        verify_generic::<Bn254, PoseidonGadget<_>, _>(
+            test_rng(),
+            Poseidon::new(setup_params(Curve::Bn254, 5, 5)),
+        )
     }
 }
