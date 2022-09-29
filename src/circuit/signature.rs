@@ -114,7 +114,7 @@ mod tests {
     use ark_bls12_381::{Bls12_381, Fr};
     use ark_crypto_primitives::{CircuitSpecificSetupSNARK, SNARK};
     use ark_ed_on_bls12_381::EdwardsProjective as JubJub;
-    use ark_ff::{BigInteger, PrimeField, ToConstraintField, UniformRand, Zero};
+    use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
     use ark_groth16::Groth16;
     use ark_std::test_rng;
     use arkworks_native_gadgets::{
