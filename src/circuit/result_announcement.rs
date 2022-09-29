@@ -56,7 +56,7 @@ where
             DecryptOutputVar::<C, CV>::new_witness(cs.clone(), || {
                 Ok(self.decrypted_balance_affine)
             })?;
-        let sk_var = SecretKeyVar::new_witness(cs.clone(), || Ok(self.elg_sk))?;
+        let sk_var = SecretKeyVar::new_witness(cs, || Ok(self.elg_sk))?;
         let decrypted_calculated = ElGamalDecGadget::decrypt(&encrypted_balance_var, &sk_var)?;
 
         decrypted_output_var.decrypted.enforce_equal(

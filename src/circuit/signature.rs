@@ -83,8 +83,7 @@ where
         let pk_cfs = pk_var.pub_key.to_constraint_field()?;
 
         let pk_fpvar = hasher_var.hash_two(&pk_cfs[0], &pk_cfs[1])?;
-        let merkle_proof_var =
-            PathVar::<_, _, N>::new_witness(cs.clone(), || Ok(self.merkle_proof))?;
+        let merkle_proof_var = PathVar::<_, _, N>::new_witness(cs, || Ok(self.merkle_proof))?;
 
         let is_signature_verified = SchnorrSignatureVerifyGadget::<C, CV>::verify(
             &schnorr_param_var,

@@ -18,7 +18,7 @@ impl<A: AffineCurve> LookupTable<A> {
     }
 
     pub fn get(&self, affine: &A) -> Option<u64> {
-        self.0.get(affine).map(|e| *e)
+        self.0.get(affine).copied()
     }
 }
 
