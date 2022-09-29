@@ -147,7 +147,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
         address: Fr,
         proof: &Proof<Bls12_381>,
     ) -> Result<u32, SystemError> {
-        Groth16::verify(&self.registration_key.1, &[commitment, address], &proof)?
+        Groth16::verify(&self.registration_key.1, &[commitment, address], proof)?
             .then_some(())
             .ok_or(SystemError::InvalidProof)?;
 
@@ -188,7 +188,7 @@ impl<R: Rng + CryptoRng, const N: usize> VotingCommitmentSystem<R, N> {
                 nullifier_hash,
                 Fr::from(self.vote_id),
             ],
-            &proof,
+            proof,
         )?
         .then_some(())
         .ok_or(SystemError::InvalidProof)?;

@@ -34,7 +34,7 @@ impl ConstraintSynthesizer<Fr> for CommitmentRegistrationCircuit {
 
         // Secret
         let randomness_var = FpVar::new_witness(cs.clone(), || Ok(self.randomness))?;
-        let nullifier_var = FpVar::new_witness(cs.clone(), || Ok(self.nullifier))?;
+        let nullifier_var = FpVar::new_witness(cs, || Ok(self.nullifier))?;
 
         let secret = hasher_var.hash_two(&address_var, &randomness_var)?;
         let commitment = hasher_var.hash_two(&secret, &nullifier_var)?;

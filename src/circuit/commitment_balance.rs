@@ -114,8 +114,7 @@ where
         let balance_var = FpVar::new_witness(cs.clone(), || Ok(self.balance))?;
         let balance_plaintext_var =
             PlaintextVar::<C, CV>::new_witness(cs.clone(), || Ok(self.balance_affine))?;
-        let elg_randomness_var =
-            RandomnessVar::new_witness(cs.clone(), || Ok(self.elg_randomness))?;
+        let elg_randomness_var = RandomnessVar::new_witness(cs, || Ok(self.elg_randomness))?;
 
         let secret = hasher_var.hash_two(&address_var, &randomness_var)?;
         let commitment = hasher_var.hash_two(&secret, &nullifier_var)?;

@@ -56,7 +56,7 @@ impl<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> ConstraintSynthesi
         let commitment_proof_var =
             PathVar::<F, HG, N>::new_witness(cs.clone(), || Ok(self.commitment_proof))?;
         let whitelist_proof_var =
-            PathVar::<F, HG, N>::new_witness(cs.clone(), || Ok(self.whitelist_proof))?;
+            PathVar::<F, HG, N>::new_witness(cs, || Ok(self.whitelist_proof))?;
 
         let secret = hasher_var.hash_two(&address_var, &randomness_var)?;
         let commitment = hasher_var.hash_two(&secret, &nullifier_var)?;

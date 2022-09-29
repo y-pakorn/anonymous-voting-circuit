@@ -148,6 +148,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
         )?)
     }
 
+    #[allow(clippy::type_complexity)]
     pub fn generate_voting_proof(
         &mut self,
         whitelist_index: u32,
@@ -208,7 +209,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
         address: Fr,
         proof: &Proof<Bls12_381>,
     ) -> Result<u32, SystemError> {
-        Groth16::verify(&self.registration_key.1, &[commitment, address], &proof)?
+        Groth16::verify(&self.registration_key.1, &[commitment, address], proof)?
             .then_some(())
             .ok_or(SystemError::InvalidProof)?;
 
@@ -257,7 +258,7 @@ impl<R: Rng + CryptoRng, const N: usize, const MAX: u64> VotingCommitmentBalance
                 encrypted_balance.1.x,
                 encrypted_balance.1.y,
             ],
-            &proof,
+            proof,
         )?
         .then_some(())
         .ok_or(SystemError::InvalidProof)?;
