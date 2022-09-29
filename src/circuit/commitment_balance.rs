@@ -112,8 +112,6 @@ where
         let whitelist_proof_var =
             PathVar::<_, _, N>::new_witness(cs.clone(), || Ok(self.whitelist_proof))?;
         let balance_var = FpVar::new_witness(cs.clone(), || Ok(self.balance))?;
-        let balance_affine_var: CV =
-            <CV as AllocVar<_, _>>::new_witness(cs.clone(), || Ok(self.balance_affine))?;
         let balance_plaintext_var =
             PlaintextVar::<C, CV>::new_witness(cs.clone(), || Ok(self.balance_affine))?;
         let elg_randomness_var =
@@ -148,10 +146,7 @@ where
         encrypted_balance.enforce_equal(&balance_encrypted)?;
 
         // Check g * balance = balance_affine
-        balance_affine_calculated.enforce_equal(&balance_affine_var)?;
-        balance_plaintext_var
-            .plaintext
-            .enforce_equal(&balance_affine_var)?;
+        balance_affine_calculated.enforce_equal(&balance_plaintext_var.plaintext)?;
 
         nullifier_hash_var.enforce_equal(&nullifier_hashed)?;
         is_correct_whitelist.enforce_equal(&Boolean::TRUE)?;
