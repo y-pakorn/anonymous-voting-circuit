@@ -5,13 +5,13 @@ use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsProjective};
 use ark_r1cs_std::{
     fields::fp::FpVar,
-    prelude::{AllocVar, CurveVar, EqGadget, GroupOpsBounds},
+    prelude::{AllocVar, CurveVar, GroupOpsBounds},
     ToBitsGadget,
 };
 use ark_relations::r1cs::ConstraintSynthesizer;
 
 use crate::{
-    elgamal::{AsymmetricDecryptionGadget, DecryptOutputVar, ElGamalDecGadget, SecretKeyVar},
+    elgamal::{AsymmetricDecryptionGadget, ElGamalDecGadget, SecretKeyVar},
     utils::ConstraintF,
 };
 
@@ -27,7 +27,6 @@ where
     pub encrypted_balance: (C::Affine, C::Affine),
 
     // Secret
-    pub decrypted_balance_affine: C::Affine,
     pub elg_sk: SecretKey<C>,
 
     // Utils
@@ -52,17 +51,12 @@ where
         let encrypted_balance_var: OutputVar<_, _> =
             OutputVar::<C, CV>::new_input(cs.clone(), || Ok(self.encrypted_balance))?;
 
-        let decrypted_output_var: DecryptOutputVar<_, _> =
-            DecryptOutputVar::<C, CV>::new_witness(cs.clone(), || {
-                Ok(self.decrypted_balance_affine)
-            })?;
         let sk_var = SecretKeyVar::new_witness(cs, || Ok(self.elg_sk))?;
         let decrypted_calculated = ElGamalDecGadget::decrypt(&encrypted_balance_var, &sk_var)?;
 
-        decrypted_output_var.decrypted.enforce_equal(
+        decrypted_calculated.decrypted.enforce_equal(
             &generator_var.scalar_mul_le(decrypted_balance_var.to_bits_le()?.iter())?,
         )?;
-        decrypted_output_var.enforce_equal(&decrypted_calculated)?;
 
         Ok(())
     }
@@ -103,13 +97,11 @@ mod tests {
             .into_affine();
         let randomness = Randomness::rand(&mut rng);
         let primitive_result = MyEnc::encrypt(&parameters, &pk, &fr_affine, &randomness)?;
-        let primitive_decoded_result = MyEnc::decrypt(&parameters, &sk, &primitive_result)?;
 
         let (cpk, cvk) = Groth16::<Bls12_381>::setup(
             ResultAnnouncementCircuit {
                 decrypted_balance: Fr::rand(&mut rng),
                 encrypted_balance: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
-                decrypted_balance_affine: EdwardsAffine::rand(&mut rng),
                 elg_sk: SecretKey(<EdwardsProjective as ProjectiveCurve>::ScalarField::rand(
                     &mut rng,
                 )),
@@ -122,7 +114,6 @@ mod tests {
             &cpk,
             ResultAnnouncementCircuit {
                 decrypted_balance: fr,
-                decrypted_balance_affine: primitive_decoded_result,
                 encrypted_balance: primitive_result,
                 elg_sk: sk,
                 _p: std::marker::PhantomData,
