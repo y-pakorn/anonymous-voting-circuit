@@ -32,7 +32,7 @@ pub trait AsymmetricDecryptionGadget<C: AsymmetricEncryptionScheme, ConstraintF:
 }
 
 #[derive(Clone, Debug)]
-pub struct SecretKeyVar<F: Field>(Vec<UInt8<F>>);
+pub struct SecretKeyVar<F: Field>(pub Vec<UInt8<F>>);
 
 impl<C, F> AllocVar<SecretKey<C>, F> for SecretKeyVar<F>
 where
