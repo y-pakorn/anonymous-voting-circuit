@@ -1,6 +1,9 @@
 use std::marker::PhantomData;
 
-use ark_crypto_primitives::encryption::elgamal::{constraints::OutputVar, SecretKey};
+use ark_crypto_primitives::encryption::elgamal::{
+    constraints::{OutputVar, PublicKeyVar},
+    PublicKey, SecretKey,
+};
 use ark_ec::{AffineCurve, ProjectiveCurve};
 use ark_ed_on_bls12_381::{constraints::EdwardsVar, EdwardsProjective};
 use ark_r1cs_std::{
@@ -25,9 +28,11 @@ where
     // Public
     pub decrypted_balance: ConstraintF<C>,
     pub encrypted_balance: (C::Affine, C::Affine),
+    pub param: C::Affine,
+    pub pk: PublicKey<C>,
 
     // Secret
-    pub elg_sk: SecretKey<C>,
+    pub sk: SecretKey<C>,
 
     // Utils
     pub _p: PhantomData<CV>,
@@ -50,10 +55,15 @@ where
         let decrypted_balance_var = FpVar::new_input(cs.clone(), || Ok(self.decrypted_balance))?;
         let encrypted_balance_var: OutputVar<_, _> =
             OutputVar::<C, CV>::new_input(cs.clone(), || Ok(self.encrypted_balance))?;
+        let param_var = <CV as AllocVar<_, _>>::new_input(cs.clone(), || Ok(self.param))?;
+        let pk_var = PublicKeyVar::<C, CV>::new_input(cs.clone(), || Ok(self.pk))?;
 
-        let sk_var = SecretKeyVar::new_witness(cs, || Ok(self.elg_sk))?;
+        let sk_var = SecretKeyVar::new_witness(cs, || Ok(self.sk))?;
         let decrypted_calculated = ElGamalDecGadget::decrypt(&encrypted_balance_var, &sk_var)?;
 
+        pk_var
+            .pk
+            .enforce_equal(&param_var.scalar_mul_le(sk_var.0.to_bits_le()?.iter())?)?;
         decrypted_calculated.decrypted.enforce_equal(
             &generator_var.scalar_mul_le(decrypted_balance_var.to_bits_le()?.iter())?,
         )?;
@@ -102,10 +112,12 @@ mod tests {
             ResultAnnouncementCircuit {
                 decrypted_balance: Fr::rand(&mut rng),
                 encrypted_balance: (EdwardsAffine::rand(&mut rng), EdwardsAffine::rand(&mut rng)),
-                elg_sk: SecretKey(<EdwardsProjective as ProjectiveCurve>::ScalarField::rand(
+                sk: SecretKey(<EdwardsProjective as ProjectiveCurve>::ScalarField::rand(
                     &mut rng,
                 )),
                 _p: std::marker::PhantomData,
+                pk: EdwardsAffine::rand(&mut rng),
+                param: EdwardsAffine::rand(&mut rng),
             },
             &mut rng,
         )?;
@@ -115,8 +127,10 @@ mod tests {
             ResultAnnouncementCircuit {
                 decrypted_balance: fr,
                 encrypted_balance: primitive_result,
-                elg_sk: sk,
                 _p: std::marker::PhantomData,
+                pk,
+                sk,
+                param: parameters.generator,
             },
             &mut rng,
         )?;
@@ -129,6 +143,10 @@ mod tests {
                 primitive_result.0.y,
                 primitive_result.1.x,
                 primitive_result.1.y,
+                parameters.generator.x,
+                parameters.generator.y,
+                pk.x,
+                pk.y,
             ],
             &proof,
         )?;
