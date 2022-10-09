@@ -1,4 +1,5 @@
 use ark_bls12_381::Fr;
+use ark_ff::PrimeField;
 use ark_r1cs_std::{
     fields::fp::FpVar,
     prelude::{AllocVar, EqGadget},
@@ -6,27 +7,31 @@ use ark_r1cs_std::{
 use ark_relations::r1cs::ConstraintSynthesizer;
 use arkworks_r1cs_gadgets::poseidon::{FieldHasherGadget, PoseidonGadget};
 
-pub struct CommitmentRegistrationCircuit {
+pub type CommitmentRegistrationCircuit =
+    CommitmentRegistrationCircuitGeneric<Fr, PoseidonGadget<Fr>>;
+
+pub struct CommitmentRegistrationCircuitGeneric<F: PrimeField, HG: FieldHasherGadget<F>> {
     // Public
-    pub commitment: Fr,
-    pub address: Fr,
+    pub commitment: F,
+    pub address: F,
 
     // Secret
-    pub randomness: Fr,
-    pub nullifier: Fr,
+    pub randomness: F,
+    pub nullifier: F,
 
     // Utils
-    pub hasher: <PoseidonGadget<Fr> as FieldHasherGadget<Fr>>::Native,
+    pub hasher: HG::Native,
 }
 
-impl ConstraintSynthesizer<Fr> for CommitmentRegistrationCircuit {
+impl<F: PrimeField, HG: FieldHasherGadget<F>> ConstraintSynthesizer<F>
+    for CommitmentRegistrationCircuitGeneric<F, HG>
+{
     fn generate_constraints(
         self,
-        cs: ark_relations::r1cs::ConstraintSystemRef<Fr>,
+        cs: ark_relations::r1cs::ConstraintSystemRef<F>,
     ) -> ark_relations::r1cs::Result<()> {
         // Hasher
-        let hasher_var: PoseidonGadget<Fr> =
-            FieldHasherGadget::<Fr>::from_native(&mut cs.clone(), self.hasher)?;
+        let hasher_var: HG = FieldHasherGadget::from_native(&mut cs.clone(), self.hasher)?;
 
         // Public
         let commitment_var = FpVar::new_input(cs.clone(), || Ok(self.commitment))?;
