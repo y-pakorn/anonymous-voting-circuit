@@ -660,6 +660,7 @@ dependencies = [
  "blake2",
  "derivative",
  "digest",
+ "hex",
  "thiserror",
 ]
 
