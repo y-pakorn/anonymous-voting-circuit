@@ -26,8 +26,8 @@ digest = { version = "^0.9", default-features = false }
 
 derivative = { version = "2.0", default-features = false, features = ["use_core"] }
 
-arkworks-native-gadgets = { version = "^1.0.0", default-features = false }
-arkworks-r1cs-gadgets = { version = "^1.0.0", default-features = false }
+arkworks-native-gadgets = { version = "^1.2.0", default-features = false }
+arkworks-r1cs-gadgets = { version = "^1.2.0", default-features = false }
 arkworks-utils = { version = "^1.0.1", default-features = false, features = ["poseidon_bls381_x5_5","poseidon_bn254_x5_5"] }
 
 thiserror = "1.0.35"
