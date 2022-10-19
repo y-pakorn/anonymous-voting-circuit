@@ -1,7 +1,11 @@
 [package]
-name = "voting-balance-circuit"
+name = "anonymous-voting-circuit"
 version = "0.1.0"
 edition = "2021"
+description = "zkSNARK circuit constraints implementation for anonymous voting protocol"
+repository = "https://github.com/y-pakorn/anonymous-voting-circuit"
+authors = ["yoisha <48324733+y-pakorn@users.noreply.github.com>"]
+license = "GPL-3.0-or-later"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
