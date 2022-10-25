@@ -42,6 +42,7 @@ impl<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> ConstraintSynthesi
     ) -> ark_relations::r1cs::Result<()> {
         // Hasher
         let hasher_var: HG = FieldHasherGadget::<F>::from_native(&mut cs.clone(), self.hasher)?;
+        let zero = FpVar::new_constant(cs.clone(), F::zero())?;
 
         // Public
         let commitment_root_var = FpVar::new_input(cs.clone(), || Ok(self.commitment_root))?;
@@ -75,8 +76,11 @@ impl<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> ConstraintSynthesi
         )?;
 
         nullifier_hash_var.enforce_equal(&nullifier_hashed)?;
-        is_correct_whitelist.enforce_equal(&Boolean::TRUE)?;
         is_correct_commitment.enforce_equal(&Boolean::TRUE)?;
+
+        // Conditionally enfore whitelist path based on whitelist root
+        is_correct_whitelist
+            .conditional_enforce_equal(&Boolean::TRUE, &whitelist_root_var.is_eq(&zero)?)?;
 
         Ok(())
     }
