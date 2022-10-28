@@ -13,6 +13,8 @@ use arkworks_r1cs_gadgets::{
 
 pub type VotingCommitmentCircuit<const N: usize> =
     VotingCommitmentCircuitGeneric<Fr, PoseidonGadget<Fr>, N>;
+pub type VotingCommitmentCircuitNoWhitelist<const N: usize> =
+    VotingCommitmentCircuitNoWhitelistGeneric<Fr, PoseidonGadget<Fr>, N>;
 
 pub struct VotingCommitmentCircuitGeneric<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> {
     // Public
@@ -81,6 +83,66 @@ impl<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> ConstraintSynthesi
         // Conditionally enfore whitelist path based on whitelist root
         is_correct_whitelist
             .conditional_enforce_equal(&Boolean::TRUE, &whitelist_root_var.is_eq(&zero)?.not())?;
+
+        Ok(())
+    }
+}
+
+pub struct VotingCommitmentCircuitNoWhitelistGeneric<
+    F: PrimeField,
+    HG: FieldHasherGadget<F>,
+    const N: usize,
+> {
+    // Public
+    pub commitment_root: F,
+    pub nullifier_hash: F,
+    pub vote_id: F,
+
+    // Secret
+    // commitment = H(H(addr, r), nullifier)
+    pub address: F,
+    pub randomness: F,
+    pub nullifier: F,
+    pub commitment_proof: Path<F, HG::Native, N>,
+
+    // Utils
+    pub hasher: HG::Native,
+}
+
+impl<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> ConstraintSynthesizer<F>
+    for VotingCommitmentCircuitNoWhitelistGeneric<F, HG, N>
+{
+    fn generate_constraints(
+        self,
+        cs: ark_relations::r1cs::ConstraintSystemRef<F>,
+    ) -> ark_relations::r1cs::Result<()> {
+        // Hasher
+        let hasher_var: HG = FieldHasherGadget::<F>::from_native(&mut cs.clone(), self.hasher)?;
+
+        // Public
+        let commitment_root_var = FpVar::new_input(cs.clone(), || Ok(self.commitment_root))?;
+        let nullifier_hash_var = FpVar::new_input(cs.clone(), || Ok(self.nullifier_hash))?;
+        let vote_id_var = FpVar::new_input(cs.clone(), || Ok(self.vote_id))?;
+
+        // Secret
+        let address_var = FpVar::new_witness(cs.clone(), || Ok(self.address))?;
+        let randomness_var = FpVar::new_witness(cs.clone(), || Ok(self.randomness))?;
+        let nullifier_var = FpVar::new_witness(cs.clone(), || Ok(self.nullifier))?;
+        let commitment_proof_var =
+            PathVar::<F, HG, N>::new_witness(cs.clone(), || Ok(self.commitment_proof))?;
+
+        let secret = hasher_var.hash_two(&address_var, &randomness_var)?;
+        let commitment = hasher_var.hash_two(&secret, &nullifier_var)?;
+        let nullifier_hashed = hasher_var.hash_two(&nullifier_var, &vote_id_var)?;
+
+        let is_correct_commitment = commitment_proof_var.check_membership(
+            &commitment_root_var,
+            &commitment,
+            &hasher_var,
+        )?;
+
+        nullifier_hash_var.enforce_equal(&nullifier_hashed)?;
+        is_correct_commitment.enforce_equal(&Boolean::TRUE)?;
 
         Ok(())
     }
