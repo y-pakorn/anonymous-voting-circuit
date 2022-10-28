@@ -80,7 +80,7 @@ impl<F: PrimeField, HG: FieldHasherGadget<F>, const N: usize> ConstraintSynthesi
 
         // Conditionally enfore whitelist path based on whitelist root
         is_correct_whitelist
-            .conditional_enforce_equal(&Boolean::TRUE, &whitelist_root_var.is_eq(&zero)?)?;
+            .conditional_enforce_equal(&Boolean::TRUE, &whitelist_root_var.is_eq(&zero)?.not())?;
 
         Ok(())
     }
