@@ -5,3 +5,6 @@ pub mod random_oracle;
 pub mod signature;
 pub mod system;
 pub mod utils;
+
+#[cfg(test)]
+pub mod benchmark;

@@ -32,10 +32,12 @@ derivative = { version = "2.0", default-features = false, features = ["use_core"
 
 arkworks-native-gadgets = { version = "^1.2.0", default-features = false }
 arkworks-r1cs-gadgets = { version = "^1.2.0", default-features = false }
-arkworks-utils = { version = "^1.0.1", default-features = false, features = ["poseidon_bls381_x5_5","poseidon_bn254_x5_5"] }
+arkworks-utils = { version = "^1.0.1", default-features = false, features = ["poseidon_bls381_x5_5", "poseidon_bn254_x5_5", "poseidon_bn254_x5_4", "poseidon_bn254_x5_3", "poseidon_bn254_x3_3", "poseidon_bn254_x17_3"] }
 
 thiserror = "1.0.35"
 hex = "0.4.3"
 
 [dev-dependencies]
-ark-groth16 = { version = "^0.3.0", default-features = false, features = ["print-trace"] }
+#ark-groth16 = { version = "^0.3.0", default-features = false, features = ["print-trace"] }
+ark-std = { version = "^0.3.0", default-features = false, features = ["print-trace"] }
+rand = "0.8.5"
