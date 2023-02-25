@@ -36,3 +36,6 @@ arkworks-utils = { version = "^1.0.1", default-features = false, features = ["po
 
 thiserror = "1.0.35"
 hex = "0.4.3"
+
+[dev-dependencies]
+ark-groth16 = { version = "^0.3.0", default-features = false, features = ["print-trace"] }
