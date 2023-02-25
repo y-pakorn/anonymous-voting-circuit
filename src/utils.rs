@@ -13,12 +13,22 @@ pub fn setup_params<F: PrimeField>(curve: Curve, exp: i8, width: u8) -> Poseidon
     let mds_f = bytes_matrix_to_f(&pos_data.mds);
     let rounds_f = bytes_vec_to_f(&pos_data.rounds);
 
-    PoseidonParameters {
-        mds_matrix: mds_f,
-        round_keys: rounds_f,
-        full_rounds: pos_data.full_rounds,
-        partial_rounds: pos_data.partial_rounds,
-        sbox: PoseidonSbox(pos_data.exp),
-        width: pos_data.width,
+    match (curve, exp, width) {
+        (arkworks_utils::Curve::Bn254, 17, 3) => PoseidonParameters {
+            mds_matrix: mds_f,
+            round_keys: rounds_f.into_iter().cycle().take(195).collect(),
+            full_rounds: pos_data.full_rounds,
+            partial_rounds: pos_data.partial_rounds,
+            sbox: PoseidonSbox(pos_data.exp),
+            width: pos_data.width,
+        },
+        _ => PoseidonParameters {
+            mds_matrix: mds_f,
+            round_keys: rounds_f,
+            full_rounds: pos_data.full_rounds,
+            partial_rounds: pos_data.partial_rounds,
+            sbox: PoseidonSbox(pos_data.exp),
+            width: pos_data.width,
+        },
     }
 }
