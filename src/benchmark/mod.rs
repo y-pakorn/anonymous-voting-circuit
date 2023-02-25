@@ -8,6 +8,7 @@ use ark_crypto_primitives::{CircuitSpecificSetupSNARK, SNARK};
 use ark_ec::PairingEngine;
 use ark_ff::{BigInteger, PrimeField, UniformRand, Zero};
 use ark_groth16::Groth16;
+use ark_std::{end_timer, start_timer};
 use arkworks_native_gadgets::{
     merkle_tree::SparseMerkleTree,
     poseidon::{FieldHasher, Poseidon},
@@ -40,7 +41,9 @@ fn run_registration_circuit<E: PairingEngine, R: Rng + CryptoRng>(
     let randomness = E::Fr::rand(rng);
     let nullifier = E::Fr::rand(rng);
 
+    let timer = start_timer!(|| "Computing Commitment");
     let commitment = hasher.hash_two(&hasher.hash_two(&addr, &randomness)?, &nullifier)?;
+    end_timer!(timer);
 
     let proof = Groth16::<E>::prove(
         &pk,
@@ -98,9 +101,15 @@ fn run_commitment_circuit<E: PairingEngine, R: Rng + CryptoRng>(
     let nullifier = E::Fr::rand(rng);
     let vote_id = E::Fr::zero();
 
-    let nullifier_hash = hasher.hash_two(&nullifier, &vote_id)?;
+    let timer = start_timer!(|| "Computing Commitment");
     let commitment = hasher.hash_two(&hasher.hash_two(&addr, &randomness)?, &nullifier)?;
+    end_timer!(timer);
 
+    let timer = start_timer!(|| "Computing Nullifier Hash");
+    let nullifier_hash = hasher.hash_two(&nullifier, &vote_id)?;
+    end_timer!(timer);
+
+    let timer = start_timer!(|| "Computing Merkle Tree Root And Leafs");
     commitment_tree.insert_batch(
         &BTreeMap::from_iter(
             (0..current_participant)
@@ -119,6 +128,7 @@ fn run_commitment_circuit<E: PairingEngine, R: Rng + CryptoRng>(
         ),
         &hasher,
     )?;
+    end_timer!(timer);
 
     let proof = Groth16::<E>::prove(
         &pk,
