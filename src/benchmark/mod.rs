@@ -1,3 +1,4 @@
+mod pairings;
 mod poseidon_exp;
 mod poseidon_width;
 
