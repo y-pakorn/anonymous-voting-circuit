@@ -39,6 +39,6 @@ thiserror = "1.0.35"
 hex = "0.4.3"
 
 [dev-dependencies]
-#ark-groth16 = { version = "^0.3.0", default-features = false, features = ["print-trace"] }
 ark-std = { version = "^0.3.0", default-features = false, features = ["print-trace"] }
+#ark-groth16 = { version = "^0.3.0", default-features = false, features = ["parallel"] }
 rand = "0.8.5"
